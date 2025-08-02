@@ -35,9 +35,7 @@ router.post('/add', auth, async (req, res) => {
         caption: caption,
       });
 
-      console.log(uploadedPhoto);
-
-      return res.status(201).json({ message: '✅ Paylaşıldı!', data: uploadedPhoto });
+      return res.status(201).json({ message: '✅ Paylaşıldı!' });
     }
 
     return res.status(401).json({ message: '❌ Giriş başarısız.' });
