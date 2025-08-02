@@ -14,14 +14,14 @@ let ig;
 
 router.post('/add', auth, async (req, res) => {
   try {
-    const { caption, videoPath, coverImagePath } = req.body;
+    const { caption, videoPath, coverImagePath, userName, password } = req.body;
       
     if (!ig) {
       return res.status(500).json({ message: 'Instagram API hazır değil.' });
     }
 
     // Giriş yap
-    const loggedInUser = await ig.account.login('scriptwhiz', 'Alper123+');
+    const loggedInUser = await ig.account.login(userName, password);
 
     // ✅ Giriş başarılıysa
     if (loggedInUser?.username) {
