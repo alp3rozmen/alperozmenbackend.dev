@@ -6,7 +6,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const blogRoutes = require('./routes/blog');
 const instagramRoutes = require('./routes/instagram');
-const campaignRoutes = require('./routes/campaigns');
+const campaignRoutes = require('./routes/campaings');
 
 const app = express();
 app.use(cors());
