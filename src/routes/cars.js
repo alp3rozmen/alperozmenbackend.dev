@@ -1,5 +1,5 @@
 const express = require('express');
-const Campaign = require('../models/Campaings');
+const Cars = require('../models/Cars');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
