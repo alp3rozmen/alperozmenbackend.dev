@@ -18,4 +18,4 @@ const campaignSchema = new mongoose.Schema({
   dcOver180Discount: { type: Number, required: true },
 }, { timestamps: true });
 
-module.exports = mongoose.model('campaings', campaignSchema);
+module.exports = mongoose.model('Campaign', campaignSchema, 'campaings');
