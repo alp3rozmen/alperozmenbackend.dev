@@ -1,3 +1,5 @@
+const { startBot } = require("./telebot");
+
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -26,3 +28,5 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((err) => console.error('MongoDB connection error:', err));
+
+  startBot();
