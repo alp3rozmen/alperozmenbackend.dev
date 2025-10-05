@@ -201,10 +201,10 @@ bot.on("callback_query", async (ctx) => {
       await ctx.reply(
         'Kaç kredi satın almak istersin?',
         Markup.inlineKeyboard([
-          [Markup.button.callback("10 Kredi", "10_kredi")],
-          [Markup.button.callback("50 Kredi", "50_kredi")],
-          [Markup.button.callback("100 Kredi", "100_kredi")],
-          [Markup.button.callback("1000 Kredi", "1000_kredi")]
+          [Markup.button.callback("🪙 10 Kredi 🪙", "10_kredi")],
+          [Markup.button.callback("🪙 50 Kredi 🪙", "50_kredi")],
+          [Markup.button.callback("🪙 100 Kredi 🪙", "100_kredi")],
+          [Markup.button.callback("🪙 1000 Kredi 🪙", "1000_kredi")]
         ])
       );
       break;
