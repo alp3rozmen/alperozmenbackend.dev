@@ -293,7 +293,7 @@ bot.on("successful_payment", async (ctx) => {
     user = await User.create({ telegramId, credits: 0, isFollowChannel: false });
   }
 
-  const amountMap = { "10_kredi": 10, "50_kredi": 50, "100_kredi": 100 };
+  const amountMap = { "10_kredi": 10, "50_kredi": 50, "100_kredi": 100 , "1000_kredi" : 1000 };
   const creditsToAdd = amountMap[ctx.message.successful_payment.invoice_payload] || 0;
 
   user.credits += creditsToAdd;
