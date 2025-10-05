@@ -6,7 +6,8 @@ const userSchema = new mongoose.Schema({
   credits: { type: Number, default: 0 },       // <--- kredi sayısını burada tutuyoruz
   createdAt: { type: Date, default: Date.now },
   lastFalAt: Date ,
-  isFollowChannel: Boolean                              // opsiyonel: son fal zamanı (rate-limit için)
+  isFollowChannel: Boolean,
+  isProcessing : Boolean                             // opsiyonel: son fal zamanı (rate-limit için)
 });
 
 module.exports = mongoose.model("TelveciAIUser", userSchema);

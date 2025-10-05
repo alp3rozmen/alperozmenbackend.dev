@@ -51,7 +51,12 @@ const burcYorumla = async (pBurcname , ctx) => {
     return ctx.reply("⚠ Yeterli krediniz yok. Burç yorumu için 10 kredi gerekli.");
   }
 
+  if (user.isProcessing) {
+    return ctx.reply("⚠ Şuan bir isteğiniz işleniyor lütfen işlem bittikten sonra tekrar deneyiniz.");
+  }
+
   user.credits -= 10;
+  user.isProcessing = true;
   await user.save();
 
   const contents = [
@@ -74,11 +79,14 @@ const burcYorumla = async (pBurcname , ctx) => {
     const aiComment = response.text;
     await ctx.reply(`🌙 TelveciAI yorumu:\n\n${aiComment}`);
     await ctx.reply(`🌙 Kalan Krediniz: ${user.credits}`);
+    user.isProcessing = false;
+    await user.save();
   } catch (err) {
     console.log(err);
   
     // Krediyi geri ver
     user.credits += 10;
+    user.isProcessing = false;
     await user.save();
     await ctx.reply(`⚠ Burç yorumlanırken hata oluştu. Krediniz iade edildi.`);
   }
@@ -94,7 +102,12 @@ bot.on("photo", async (ctx) => {
     return ctx.reply("⚠ Yeterli krediniz yok. Fal bakımı için 10 kredi gerekli.");
   }
 
+  if (user.isProcessing) {
+    return ctx.reply("⚠ Şuan bir isteğiniz işleniyor lütfen işlem bittikten sonra tekrar deneyiniz.");
+  }
+
   user.credits -= 10;
+  user.isProcessing = true;
   await user.save();
 
   const photo = ctx.message.photo[ctx.message.photo.length - 1];
@@ -129,11 +142,14 @@ bot.on("photo", async (ctx) => {
 
     const aiComment = response.text || falMessagesFallback[Math.floor(Math.random() * falMessagesFallback.length)];
     await ctx.reply(`🌙 TelveciAI yorumu:\n\n${aiComment}`);
+    user.isProcessing = false;
+    await user.save();
   } catch (err) {
     console.log(err);
   
     // Krediyi geri ver
     user.credits += 10;
+    user.isProcessing = false;
     await user.save();
   
     const fallback = falMessagesFallback[Math.floor(Math.random() * falMessagesFallback.length)];
