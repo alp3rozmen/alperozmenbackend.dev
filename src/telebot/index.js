@@ -34,12 +34,56 @@ bot.start(async (ctx) => {
     welcomeMessage,
     Markup.inlineKeyboard([
       [Markup.button.callback("📸 Fal Baktır (10 Kredi)", "fal_baktır")],
+      [Markup.button.callback("♍ Burç Yorumu (10 Kredi)", "burc_yorumu")],
       [Markup.button.callback("💰 Kredi Durumu", "kredi_durumu")],
       [Markup.button.callback("💳 Kredi Satın Al", "odeme_yap")],
       [Markup.button.callback("🎁 Kanalımıza Katıl 10 Kredi Kazan", "hediye_kredi")]
     ])
   );
 });
+
+
+const burcYorumla = async (pBurcname , ctx) => {
+  const telegramId = String(ctx.from.id);
+  const user = await User.findOne({ telegramId });
+  
+  if (!user.credits || user.credits < 10) {
+    return ctx.reply("⚠ Yeterli krediniz yok. Burç yorumu için 10 kredi gerekli.");
+  }
+
+  user.credits -= 10;
+  await user.save();
+
+  const contents = [
+    {
+      text: `${pBurcname} + Bu burç için bugünün yorumunu yaparmısın`,
+    }
+  ];
+
+  await ctx.reply(`🌙 Seçilen burç yorumlanıyor... 🔮\nBu işlem birkaç dakika sürebilir, yorum hazır olduğunda sana mesaj atacağız.`);
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents,
+      config: {
+        systemInstruction: "Sen bir burç yorumcususun, adın TelveciAI",
+      }
+    });
+
+    const aiComment = response.text;
+    await ctx.reply(`🌙 TelveciAI yorumu:\n\n${aiComment}`);
+    await ctx.reply(`🌙 Kalan Krediniz: ${user.credits}`);
+  } catch (err) {
+    console.log(err);
+  
+    // Krediyi geri ver
+    user.credits += 10;
+    await user.save();
+    await ctx.reply(`⚠ Burç yorumlanırken hata oluştu. Krediniz iade edildi.`);
+  }
+  
+}
 
 // Fotoğraf geldiğinde fal üret
 bot.on("photo", async (ctx) => {
@@ -116,10 +160,41 @@ bot.on("callback_query", async (ctx) => {
       }
       break;
 
-    case "kredi_durumu":
+    case "burc_yorumu":
       await ctx.answerCbQuery();
-      await ctx.reply(`💰 Kredi durumun: ${user.credits}`);
+      await ctx.reply(
+        'Hangi Burç için yorum almak istersin?',
+        Markup.inlineKeyboard([
+          [Markup.button.callback("♈ Koç (Aries)", "koc")],
+          [Markup.button.callback("♉ Boğa (Taurus)", "boga")],
+          [Markup.button.callback("♊ İkizler (Gemini)", "ikizler")],
+          [Markup.button.callback("♋ Yengeç (Cancer)", "yengec")],
+          [Markup.button.callback("♌ Aslan (Leo)", "aslan")],
+          [Markup.button.callback("♍ Başak (Virgo)", "basak")],
+          [Markup.button.callback("♎ Terazi (Libra)", "terazi")],
+          [Markup.button.callback("♏ Akrep (Scorpio)", "akrep")],
+          [Markup.button.callback("♐ Yay (Sagittarius)", "yay")],
+          [Markup.button.callback("♑ Oğlak (Capricorn)", "oglak")],
+          [Markup.button.callback("♒ Kova (Aquarius)", "kova")],
+          [Markup.button.callback("♓ Balık (Pisces)", "balik")]
+        ])
+      );
       break;
+
+    case  "koc" :
+    case  "boga" :
+    case  "ikizler" :
+    case  "yengec" :
+    case  "aslan" :
+    case  "basak" :
+    case  "terazi" :
+    case  "akrep" :
+    case  "yay" :
+    case  "oglak" :
+    case  "kova" :
+    case  "balik" :
+      burcYorumla(action, ctx);
+    break;
 
     case "odeme_yap":
       await ctx.answerCbQuery();
@@ -133,6 +208,11 @@ bot.on("callback_query", async (ctx) => {
         ])
       );
       break;
+      
+      case "kredi_durumu":
+        await ctx.answerCbQuery();
+        await ctx.reply(`💰 Kredi durumun: ${user.credits}`);
+        break;
 
     case "10_kredi":
     case "50_kredi":
