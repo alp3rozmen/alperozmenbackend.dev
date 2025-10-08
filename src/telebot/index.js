@@ -160,51 +160,65 @@ bot.on("photo", async (ctx) => {
 
 });
 
+// Referans Kodu Sahnesi
+const contactDataWizard = new Scenes.WizardScene(
+  'REFERANCE_SCENE',
+  (ctx) => {
+    ctx.reply('Lütfen Referans Kodunu Girin:');
+    ctx.wizard.state.contactData = {};
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    const code = ctx.message.text?.trim();
+    if (!code || code.length === 0) {
+      await ctx.reply('❌ Geçersiz kod girdiniz.');
+      return;
+    }
+
+    const telegramId = String(ctx.from.id);
+    const user = await User.findOne({ telegramId });
+
+    if (!user) {
+      await ctx.reply('⚠ Kullanıcı bulunamadı.');
+      return ctx.scene.leave();
+    }
+
+    if (user.isUsedRefCode) {
+      await ctx.reply('❗ Daha önce bu ödülü zaten kullandınız.');
+      return ctx.scene.leave();
+    }
+
+    const refCodeFindedUser = await User.findOne({ refCode: code });
+    if (!refCodeFindedUser) {
+      await ctx.reply('❌ Referans kodu bulunamadı.');
+      return ctx.scene.leave();
+    }
+
+    // Başarılı
+    user.credits += 10;
+    user.isUsedRefCode = true;
+    await user.save();
+
+    refCodeFindedUser.credits += 5; // referans veren kişi de ödül alabilir
+    await refCodeFindedUser.save();
+
+    await ctx.reply(`💰 Tebrikler! 10 kredi hesabınıza eklendi.\n🔹 Mevcut krediniz: ${user.credits}`);
+    return ctx.scene.leave();
+  }
+);
+
+
+const stage = new Scenes.Stage([contactDataWizard]);
+bot.use(stage.middleware());
+
+
 // Callback query (butonlar)
 bot.on("callback_query", async (ctx) => {
   const telegramId = String(ctx.from.id);
   const action = ctx.callbackQuery.data;
   const user = await User.findOne({ telegramId });
-  const refCodeFindedUser = User.findOne({refCode : ctx.message.text})
 
   if (!user) return;
-
-    const contactDataWizard = new Scenes.WizardScene(
-      'REFERANCE_SCENE', // first argument is Scene_ID, same as for BaseScene
-      (ctx) => {
-        ctx.reply('Lütfen Referans Kodunu Girin :');
-        ctx.wizard.state.contactData = {};
-        return ctx.wizard.next();
-      },
-      (ctx) => {
-        // validation example
-        if (ctx.message.text.length == 0) {
-          ctx.reply('!Geçersiz Kod Girdiniz.');
-          return; 
-        }
-        else{
-          if (user.isUsedRefCode) { 
-            ctx.reply('Daha önce bu ödülü zaten kullandınız!');
-            return;
-          }
-        
-          if (!refCodeFindedUser) {
-            ctx.reply('Referans Kodu bulunamadı');
-            return;
-          }
-        }
-        
-        ctx.wizard.state.contactData.fio = ctx.message.text;;
-        return ctx.wizard.next();
-      },
-      async (ctx) => {
-        user.credits += 10;
-        user.isUsedRefCode = true;
-        user.save();
-        ctx.reply('💰 Tebrikler bonus krediniz hesabınıza yüklendi' + ' Mecvut Krediniz : ' + user.credits );
-        return ctx.scene.leave();
-      },
-    );
 
   switch(action) {
     case "fal_baktır":
@@ -285,23 +299,27 @@ bot.on("callback_query", async (ctx) => {
       });
       break;
 
-    case "use_ref_code":
-      contactDataWizard();
+      case "use_ref_code":
+        await ctx.answerCbQuery();
+        await ctx.scene.enter('REFERANCE_SCENE');
       break;
 
       case "hediye_kredi_davet":
-        var userRefCode = user.refCode;
-        
-        if (user.refCode == '') {
-           userRefCode = user.username + '_' + Math.random(1,10).toString();
-           user.save();
+        let userRefCode = user.refCode;
+
+        if (!userRefCode || userRefCode === '') {
+          userRefCode = `${user.username}_${Math.floor(Math.random() * 10000)}`;
+          user.refCode = userRefCode;
+          await user.save();
         }
-        ctx.reply(`Arkadaşınızı davet ederek 5 Kredi kazanabilirsiniz`);
-        ctx.reply(`Referans Kodunuz : ${userRefCode}`);
+
+        await ctx.reply(`Arkadaşınızı davet ederek 5 kredi kazanabilirsiniz.`);
+        await ctx.reply(`🎟 Referans Kodunuz: ${userRefCode}`);
         await ctx.answerCbQuery();
         break;
 
-    case "hediye_kredi":
+
+      case "hediye_kredi":
       const channelUsername = "@telveciai";
       try {
         const member = await ctx.telegram.getChatMember(channelUsername, telegramId);
