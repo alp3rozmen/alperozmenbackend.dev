@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Telegraf, Markup } = require("telegraf");
+const { Telegraf, Markup, Scenes } = require("telegraf");
 const User = require("../models/UserTeleBot");
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
@@ -37,7 +37,9 @@ bot.start(async (ctx) => {
       [Markup.button.callback("♍ Burç Yorumu (10 Kredi)", "burc_yorumu")],
       [Markup.button.callback("💰 Kredi Durumu", "kredi_durumu")],
       [Markup.button.callback("💳 Kredi Satın Al", "odeme_yap")],
-      [Markup.button.callback("🎁 Kanalımıza Katıl 10 Kredi Kazan", "hediye_kredi")]
+      [Markup.button.callback("🎁 Kanalımıza Katıl 10 Kredi Kazan", "hediye_kredi")],
+      [Markup.button.callback("🎁 Arkadaşını Davet Et 10 Kredi Kazan", "hediye_kredi_davet")],
+      [Markup.button.callback("🎁 Referans Kodu Kullan", "use_ref_code")]
     ])
   );
 });
@@ -163,8 +165,46 @@ bot.on("callback_query", async (ctx) => {
   const telegramId = String(ctx.from.id);
   const action = ctx.callbackQuery.data;
   const user = await User.findOne({ telegramId });
+  const refCodeFindedUser = User.findOne({refCode : ctx.message.text})
 
   if (!user) return;
+
+    const contactDataWizard = new Scenes.WizardScene(
+      'REFERANCE_SCENE', // first argument is Scene_ID, same as for BaseScene
+      (ctx) => {
+        ctx.reply('Lütfen Referans Kodunu Girin :');
+        ctx.wizard.state.contactData = {};
+        return ctx.wizard.next();
+      },
+      (ctx) => {
+        // validation example
+        if (ctx.message.text.length == 0) {
+          ctx.reply('!Geçersiz Kod Girdiniz.');
+          return; 
+        }
+        else{
+          if (user.isUsedRefCode) { 
+            ctx.reply('Daha önce bu ödülü zaten kullandınız!');
+            return;
+          }
+        
+          if (!refCodeFindedUser) {
+            ctx.reply('Referans Kodu bulunamadı');
+            return;
+          }
+        }
+        
+        ctx.wizard.state.contactData.fio = ctx.message.text;;
+        return ctx.wizard.next();
+      },
+      async (ctx) => {
+        user.credits += 10;
+        user.isUsedRefCode = true;
+        user.save();
+        ctx.reply('💰 Tebrikler bonus krediniz hesabınıza yüklendi' + ' Mecvut Krediniz : ' + user.credits );
+        return ctx.scene.leave();
+      },
+    );
 
   switch(action) {
     case "fal_baktır":
@@ -245,6 +285,22 @@ bot.on("callback_query", async (ctx) => {
       });
       break;
 
+    case "use_ref_code":
+      contactDataWizard();
+      break;
+
+      case "hediye_kredi_davet":
+        var userRefCode = user.refCode;
+        
+        if (user.refCode == '') {
+           userRefCode = user.username + '_' + Math.random(1,10).toString();
+           user.save();
+        }
+        ctx.reply(`Arkadaşınızı davet ederek 5 Kredi kazanabilirsiniz`);
+        ctx.reply(`Referans Kodunuz : ${userRefCode}`);
+        await ctx.answerCbQuery();
+        break;
+
     case "hediye_kredi":
       const channelUsername = "@telveciai";
       try {
@@ -272,6 +328,8 @@ bot.on("callback_query", async (ctx) => {
         await ctx.answerCbQuery("⚠ Kanal kontrol edilirken hata oluştu.", { show_alert: true });
       }
       break;
+
+      
 
     case "check_membership":
       try {

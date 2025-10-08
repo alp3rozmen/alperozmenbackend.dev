@@ -7,7 +7,9 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   lastFalAt: Date ,
   isFollowChannel: Boolean,
-  isProcessing : Boolean                             // opsiyonel: son fal zamanı (rate-limit için)
+  isProcessing : Boolean,
+  refCode : String,
+  isUsedRefCode : Boolean                             // opsiyonel: son fal zamanı (rate-limit için)
 });
 
 module.exports = mongoose.model("TelveciAIUser", userSchema);
