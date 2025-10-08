@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   lastFalAt: Date ,
   isFollowChannel: Boolean,
   isProcessing : Boolean,
-  refCode : String,
+  refCode: { type: String, unique: true, sparse: true },
   isUsedRefCode : Boolean                             // opsiyonel: son fal zamanı (rate-limit için)
 });
 
