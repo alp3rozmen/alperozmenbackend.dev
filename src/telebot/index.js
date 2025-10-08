@@ -3,7 +3,6 @@ const { Telegraf, Markup, Scenes } = require("telegraf");
 const User = require("../models/UserTeleBot");
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
-const session = require("telegraf/session");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API });
