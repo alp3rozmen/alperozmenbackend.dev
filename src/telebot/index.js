@@ -188,7 +188,11 @@ const contactDataWizard = new Scenes.WizardScene(
       return ctx.scene.leave();
     }
 
-    const refCodeFindedUser = await User.findOne({ refCode: code });
+    const refCodeFindedUser = await User.findOne({
+      refCode: code,
+      telegramId: { $ne: telegramId } // kendi kodu hariç
+    });
+    
     if (!refCodeFindedUser) {
       await ctx.reply('❌ Referans kodu bulunamadı.');
       return ctx.scene.leave();
@@ -212,8 +216,9 @@ const contactDataWizard = new Scenes.WizardScene(
 const stage = new Scenes.Stage([contactDataWizard]);
 
 // 🔧 Bu iki satırı ekle:
-const session = require("telegraf/session");
+const { session } = require("telegraf");
 bot.use(session());
+
 
 // Sahne middleware'i
 bot.use(stage.middleware());
