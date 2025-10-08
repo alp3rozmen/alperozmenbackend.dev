@@ -313,7 +313,7 @@ bot.on("callback_query", async (ctx) => {
           await user.save();
         }
 
-        await ctx.reply(`Arkadaşınızı davet ederek 5 kredi kazanabilirsiniz.`);
+        await ctx.reply(`Arkadaşınızı davet ederek 10 kredi kazanabilirsiniz.`);
         await ctx.reply(`🎟 Referans Kodunuz: ${userRefCode}`);
         await ctx.answerCbQuery();
         break;
