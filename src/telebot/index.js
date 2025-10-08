@@ -199,7 +199,7 @@ const contactDataWizard = new Scenes.WizardScene(
     user.isUsedRefCode = true;
     await user.save();
 
-    refCodeFindedUser.credits += 5; // referans veren kişi de ödül alabilir
+    refCodeFindedUser.credits += 10; // referans veren kişi de ödül alabilir
     await refCodeFindedUser.save();
 
     await ctx.reply(`💰 Tebrikler! 10 kredi hesabınıza eklendi.\n🔹 Mevcut krediniz: ${user.credits}`);
@@ -208,8 +208,16 @@ const contactDataWizard = new Scenes.WizardScene(
 );
 
 
+// Referans kodu sahnesi tanımlandıktan sonra:
 const stage = new Scenes.Stage([contactDataWizard]);
+
+// 🔧 Bu iki satırı ekle:
+const session = require("telegraf/session");
+bot.use(session());
+
+// Sahne middleware'i
 bot.use(stage.middleware());
+
 
 
 // Callback query (butonlar)
