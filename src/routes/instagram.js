@@ -2,6 +2,8 @@ const express = require('express');
 const fs = require('fs/promises');
 const { IgApiClient, IgLoginTwoFactorRequiredError } = require('instagram-private-api');
 const auth = require('../middleware/auth');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 const client = new IgApiClient();
@@ -83,22 +85,49 @@ router.post('/2flogin', auth, async (req, res) => {
   }
 });
 
+
+router.post('/add', auth, upload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'cover', maxCount: 1 }
+]), async (req, res) => {
+  
+  if (!loggedUser?.username) {
+    return res.status(401).json({ message: '❌ Giriş başarısız, video yüklenmedi.' });
+  }
+
+  const { caption } = req.body;
+  const videoBuffer = req.files.video[0].buffer;
+  const coverBuffer = req.files.cover[0].buffer;
+
+  try {
+    await client.publish.video({
+      video: videoBuffer,
+      coverImage: coverBuffer,
+      caption,
+    });  
+  } catch (error) {
+    res.json({ message: 'Hata Video Paylaşılamadı!' });  
+  }
+  
+  res.json({ message: '✅ Video başarıyla paylaşıldı!' });
+});
+
+
 // 🔹 Video paylaşma endpoint
 router.post('/add', auth, async (req, res) => {
-  const { caption, videoPath, coverImagePath, userName, password } = req.body;
+  const { caption, videoBase64, coverBase64, userName, password } = req.body;
+
   if (!userName || !password) {
     return res.status(400).json({ message: 'Kullanıcı adı ve şifre gerekli.' });
   }
 
   try {
     if (!loggedUser?.username) {
-      return res.status(401).json({
-        message: '❌ Giriş başarısız, video yüklenmedi.',
-      });
+      return res.status(401).json({ message: '❌ Giriş başarısız, video yüklenmedi.' });
     }
 
-    const bufferVideo = await fs.readFile(videoPath);
-    const bufferCoverImage = await fs.readFile(coverImagePath);
+    const bufferVideo = Buffer.from(videoBase64, 'base64');
+    const bufferCoverImage = coverBase64 ? Buffer.from(coverBase64, 'base64') : null;
 
     await client.publish.video({
       video: bufferVideo,
@@ -106,9 +135,7 @@ router.post('/add', auth, async (req, res) => {
       caption,
     });
 
-    return res.status(201).json({
-      message: '✅ Video başarıyla paylaşıldı!',
-    });
+    return res.status(201).json({ message: '✅ Paylaşıldı' });
   } catch (err) {
     console.error('Instagram paylaşım hatası:', err);
     return res.status(500).json({
@@ -117,5 +144,7 @@ router.post('/add', auth, async (req, res) => {
     });
   }
 });
+
+
 
 module.exports = router;
