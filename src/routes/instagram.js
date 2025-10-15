@@ -50,6 +50,9 @@ router.post('/login', auth, async (req, res) => {
     if (error.message == "TwoFactor") {
       return res.status(403).json({message : 'TwoFactorNeeded'});
     }
+    else{
+      return res.status(403).json({message : error.message});
+    }
   }
 });
 
