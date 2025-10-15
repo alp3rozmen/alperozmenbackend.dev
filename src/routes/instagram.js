@@ -70,7 +70,7 @@ router.post('/2flogin', auth, async (req, res) => {
     })
 
     if (loggedUser?.username) {
-      return res.status(200).json({ message: 'Giriş Başarılı' });
+      return res.status(200).json({ message: 'Giriş Başarılı' , code : 'OK' });
     }
     else{
       return res.status(400).json({ message: loggedUser });
@@ -93,7 +93,7 @@ router.post('/add', auth, async (req, res) => {
         message: '❌ Giriş başarısız, video yüklenmedi.',
       });
     }
-    
+
     const bufferVideo = await fs.readFile(videoPath);
     const bufferCoverImage = await fs.readFile(coverImagePath);
 
