@@ -35,7 +35,7 @@ router.post('/login', auth, async (req, res) => {
     if (err instanceof IgLoginTwoFactorRequiredError) {
       igInstances[userName] = { ig, type: 'two_factor', info: err.twoFactorInfo };
       return res.status(403).json({
-        message: '⚠️ 2FA gerekli. Kullanıcıya kod sorulmalı.',
+        message:  err.message +'⚠️ 2FA gerekli. Kullanıcıya kod sorulmalı.',
         type: 'two_factor',
         two_factor_info: err.twoFactorInfo,
       });
