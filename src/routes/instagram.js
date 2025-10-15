@@ -106,45 +106,11 @@ router.post('/add', auth, upload.fields([
       caption,
     });  
   } catch (error) {
-    return res.status(200).json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
+    return res.status(400).json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
   }
   
-  return res.status(400).json({ message: '✅ Video başarıyla paylaşıldı!' });
+  return res.status(201).json({ message: '✅ Video başarıyla paylaşıldı!' });
 });
-
-
-// 🔹 Video paylaşma endpoint
-router.post('/add', auth, async (req, res) => {
-  const { caption, videoBase64, coverBase64, userName, password } = req.body;
-
-  if (!userName || !password) {
-    return res.status(400).json({ message: 'Kullanıcı adı ve şifre gerekli.' });
-  }
-
-  try {
-    if (!loggedUser?.username) {
-      return res.status(401).json({ message: '❌ Giriş başarısız, video yüklenmedi.' });
-    }
-
-    const bufferVideo = Buffer.from(videoBase64, 'base64');
-    const bufferCoverImage = coverBase64 ? Buffer.from(coverBase64, 'base64') : null;
-
-    await client.publish.video({
-      video: bufferVideo,
-      coverImage: bufferCoverImage,
-      caption,
-    });
-
-    return res.status(201).json({ message: '✅ Paylaşıldı' });
-  } catch (err) {
-    console.error('Instagram paylaşım hatası:', err);
-    return res.status(500).json({
-      message: 'Instagram paylaşımı başarısız.',
-      error: err.message,
-    });
-  }
-});
-
 
 
 module.exports = router;
