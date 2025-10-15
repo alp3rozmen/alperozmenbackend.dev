@@ -91,7 +91,7 @@ router.post('/add', auth, async (req, res) => {
   }
 
   try {
-    if (!loggedInUser?.username) {
+    if (!loggedUser?.username) {
       return res.status(401).json({
         message: '❌ Giriş başarısız, video yüklenmedi.',
       });
@@ -100,7 +100,7 @@ router.post('/add', auth, async (req, res) => {
     const bufferVideo = await fs.readFile(videoPath);
     const bufferCoverImage = await fs.readFile(coverImagePath);
 
-    await ig.publish.video({
+    await client..publish.video({
       video: bufferVideo,
       coverImage: bufferCoverImage,
       caption,
@@ -110,20 +110,6 @@ router.post('/add', auth, async (req, res) => {
       message: '✅ Video başarıyla paylaşıldı!',
     });
   } catch (err) {
-    if (err.error && err.error.message === 'challenge_required') {
-      return res.status(403).json({
-        message: '⚠️ Challenge gerekli, video yüklenemedi.',
-        challenge: err.error.challenge,
-      });
-    }
-
-    if (err.error && err.error.message === 'two_factor_required') {
-      return res.status(403).json({
-        message: '⚠️ 2FA gerekli, video yüklenemedi.',
-        two_factor_info: err.error.two_factor_info,
-      });
-    }
-
     console.error('Instagram paylaşım hatası:', err);
     return res.status(500).json({
       message: 'Instagram paylaşımı başarısız.',
