@@ -106,10 +106,10 @@ router.post('/add', auth, upload.fields([
       caption,
     });  
   } catch (error) {
-    return res.json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
+    return res.status(200).json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
   }
   
-  return res.json({ message: '✅ Video başarıyla paylaşıldı!' });
+  return res.status(400).json({ message: '✅ Video başarıyla paylaşıldı!' });
 });
 
 
