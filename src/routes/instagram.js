@@ -100,7 +100,7 @@ router.post('/add', auth, async (req, res) => {
     const bufferVideo = await fs.readFile(videoPath);
     const bufferCoverImage = await fs.readFile(coverImagePath);
 
-    await client..publish.video({
+    await client.publish.video({
       video: bufferVideo,
       coverImage: bufferCoverImage,
       caption,
