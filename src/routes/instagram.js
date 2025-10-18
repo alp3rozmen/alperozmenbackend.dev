@@ -54,7 +54,7 @@ router.post('/login', auth, async (req, res) => {
       return res.status(403).json({message : 'TwoFactorNeeded'});
     }
     else if (error.message == "challenge_required"){
-      client.challenge();
+      client.challenge.auto(true);
     }
     else{
       return res.status(403).json({message : error.message});
