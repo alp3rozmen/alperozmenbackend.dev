@@ -87,8 +87,8 @@ router.post('/2flogin', auth, async (req, res) => {
 
 
 router.post('/add', auth, upload.fields([
-  { name: 'video', maxCount: 1 },
-  { name: 'cover', maxCount: 1 }
+  { name: 'video' },
+  { name: 'cover' }
 ]), async (req, res) => {
   
   if (!loggedUser?.username) {
@@ -98,18 +98,21 @@ router.post('/add', auth, upload.fields([
   const { caption } = req.body;
   const videoBuffer = req.files.video[0].buffer;
   const coverBuffer = req.files.cover[0].buffer;
-
+ 
   try {
-    await client.publish.video({
+    var res = await client.publish.video({
       video: videoBuffer,
       coverImage: coverBuffer,
       caption,
     });  
+
+    return res.status(201).json({ message: res.status.toString() });
+
   } catch (error) {
     return res.status(400).json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
   }
   
-  return res.status(201).json({ message: '✅ Video başarıyla paylaşıldı!' });
+  
 });
 
 
