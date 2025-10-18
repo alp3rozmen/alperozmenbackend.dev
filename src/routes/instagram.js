@@ -10,10 +10,8 @@ const client = new IgApiClient();
 let loggedUser = null;
 
 async function TwoFactorLogin(options) {
-  console.log(options);
   try {
-    
-    loggedUser = await client.account.twoFactorLogin(options)
+    loggedUser = await client.account.twoFactorLogin(options);
   } catch (e) {    
     throw new Error("Api Hatası : " + e.message);
   }
@@ -25,18 +23,24 @@ async function LoginFnc(pUserName, pPassword) {
     loggedUser = await client.account.login(pUserName, pPassword);
   } catch (e) {
     if (e instanceof IgLoginTwoFactorRequiredError) {
-      throw new Error("TwoFactor");
+      const lvJson = {message :'TwoFactor', twoFactorIdentity : e.response.body.two_factor_info.two_factor_identifier};
+      throw new Error(JSON.stringify(lvJson));
     }
     else{
-      throw new Error("Api Hatası : " + e.message);
+      const lvJson = {message :'Api Hatası'};
+      throw new Error(JSON.stringify(lvJson));
     }
   }
 }
 
 // 🔹 Login endpoint
 router.post('/login', auth, async (req, res) => {
+  
+  if (client.account) {
+    client.account.logout();  
+  }
+  
   const { userName, password } = req.body;
-
   if (!userName || !password) {
     return res.status(400).json({ message: 'Kullanıcı adı ve şifre gerekli.' });
   }
@@ -50,20 +54,18 @@ router.post('/login', auth, async (req, res) => {
       return res.status(200).json({ message: 'Giriş Başarısız' });
     }
   } catch (error) {
-    if (error.message == "TwoFactor") {
-      return res.status(403).json({message : 'TwoFactorNeeded'});
-    }
-    else if (error.message == "challenge_required"){
-      client.challenge.auto(true);
+    const lvError = JSON.parse(error.message);
+    if (lvError.message == 'TwoFactor') {
+      return res.status(403).json({twoFactorIdentity : lvError.twoFactorIdentity , code : 'TwoFactorNeeded'});
     }
     else{
-      return res.status(403).json({message : error.message});
+      return res.status(404).json({message : lvError.message});
     }
   }
 });
 
 router.post('/2flogin', auth, async (req, res) => {
-  const { pverificationCode, ptwoFactorIdentifier, pusername,pver, pverificationMethod } = req.body;
+  const { pverificationCode, ptwoFactorIdentifier, pusername, pverificationMethod } = req.body;
 
   if (!pusername) {
     return res.status(400).json({ message: 'Kullanıcı adı gerekli!' });
@@ -77,7 +79,8 @@ router.post('/2flogin', auth, async (req, res) => {
       trustThisDevice : '1',
       verificationMethod : pverificationMethod
     })
-
+    
+    console.log('loggeduser = ' , loggedUser);
     if (loggedUser?.username) {
       return res.status(200).json({ message: 'Giriş Başarılı' , code : 'OK' });
     }
