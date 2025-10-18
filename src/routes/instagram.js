@@ -98,6 +98,9 @@ router.post('/add', auth, upload.fields([
   const { caption } = req.body;
   const videoBuffer = req.files.video[0].buffer;
   const coverBuffer = req.files.cover[0].buffer;
+
+  console.log(videoBuffer);
+  console.log(coverBuffer);
  
   try {
     var response = await client.publish.video({
@@ -106,7 +109,11 @@ router.post('/add', auth, upload.fields([
       caption,
     });  
 
-    return res.status(201).json({ message: response });
+    if (!response.upload_id) {
+      return res.status(400).json({ message: response, code : 'ERROR'   });  
+    }
+
+    return res.status(201).json({ message: 'Video Paylaşıldı', code : 'OK'  });
 
   } catch (error) {
     return res.status(400).json({ message: 'Hata Video Paylaşılamadı! ' +  error.message});  
