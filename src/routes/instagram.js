@@ -12,6 +12,7 @@ let loggedUser = null;
 async function TwoFactorLogin(options) {
   console.log(options);
   try {
+    
     loggedUser = await client.account.twoFactorLogin(options)
   } catch (e) {    
     throw new Error("Api Hatası : " + e.message);
@@ -51,6 +52,9 @@ router.post('/login', auth, async (req, res) => {
   } catch (error) {
     if (error.message == "TwoFactor") {
       return res.status(403).json({message : 'TwoFactorNeeded'});
+    }
+    else if (error.message == "challenge_required"){
+      client.challenge();
     }
     else{
       return res.status(403).json({message : error.message});
