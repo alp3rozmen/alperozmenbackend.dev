@@ -93,12 +93,14 @@ router.post('/add', auth, upload.fields([
   { name: 'video' },
   { name: 'cover' }
 ]), async (req, res) => {
-  
+  const { caption, pusername, ppassword } = req.body;
   if (!loggedUser?.username) {
-    return res.status(401).json({ message: '❌ Giriş başarısız, video yüklenmedi.' });
+    loggedUser = await LoginFnc(pusername, ppassword);
+    if (!loggedUser?.username) {
+      return res.status(400).json({ message: loggedUser });
+    }
   }
 
-  const { caption } = req.body;
   const videoBuffer = req.files.video[0].buffer;
   const coverBuffer = req.files.cover[0].buffer;
 
