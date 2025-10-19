@@ -27,7 +27,7 @@ async function LoginFnc(pUserName, pPassword) {
       throw new Error(JSON.stringify(lvJson));
     }
     else{
-      const lvJson = {message :'Api Hatası'};
+      const lvJson = {message :'Api Hatası' + e.message};
       throw new Error(JSON.stringify(lvJson));
     }
   }
@@ -35,11 +35,7 @@ async function LoginFnc(pUserName, pPassword) {
 
 // 🔹 Login endpoint
 router.post('/login', auth, async (req, res) => {
-  
-  if (client.account) {
-    client.account.logout();  
-  }
-  
+ 
   const { userName, password } = req.body;
   if (!userName || !password) {
     return res.status(400).json({ message: 'Kullanıcı adı ve şifre gerekli.' });
