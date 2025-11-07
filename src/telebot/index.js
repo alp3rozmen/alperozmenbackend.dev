@@ -95,6 +95,23 @@ const burcYorumla = async (pBurcname , ctx) => {
   
 }
 
+bot.on("message", async (ctx) => {
+  if (ctx.chat.type === "group" || ctx.chat.type === "supergroup") {
+    const username = ctx.from.username
+      ? `@${ctx.from.username}`
+      : ctx.from.first_name || "kullanıcı";
+  
+    // Grupta fal baktırmaya çalışan kişiye yönlendirme mesajı at
+    await ctx.reply(
+      `${username}, kahve falına baktırmak için lütfen botla özelden konuş 💌\n👉 [TelveciAI botuna git](https://t.me/telveciaibot) ve **/start** yaz.`,
+      { parse_mode: "Markdown" }
+    );
+  
+    // Gruba başka hiçbir şey atma
+    return;
+  }
+});
+
 // Fotoğraf geldiğinde fal üret
 bot.on("photo", async (ctx) => {
   const telegramId = String(ctx.from.id);
@@ -413,4 +430,4 @@ const startBot = () => {
   console.log("🚀 TelveciAI botu çalışıyor...");
 };
 
-// module.exports = { bot, startBot };
+module.exports = { bot, startBot };
