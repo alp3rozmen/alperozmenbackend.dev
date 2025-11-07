@@ -413,4 +413,4 @@ const startBot = () => {
   console.log("🚀 TelveciAI botu çalışıyor...");
 };
 
-module.exports = { bot, startBot };
+// module.exports = { bot, startBot };
