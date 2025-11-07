@@ -29,4 +29,4 @@ mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTop
   })
   .catch((err) => console.error('MongoDB connection error:', err));
 
-  startBot();
+  // startBot();
