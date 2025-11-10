@@ -8,6 +8,8 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API });
 const RSS_URL = "https://www.coindesk.com/arc/outboundfeeds/rss"
 const botBalyoz = new Telegraf(process.env.BOT_TOKEN_CRYPTO);
+const CHANNEL_ID = '@guncelkriptohaber';
+let lastTitle = "";
 
 const falMessagesFallback = [
   "Yakında beklediğin bir haber gelebilir. ☕️",
@@ -17,16 +19,36 @@ const falMessagesFallback = [
   "Ev içinde hareketlenme var, güzel gelişmeler olacak."
 ];
 
-botBalyoz.start(async (ctx) => {
-  
-})
+async function aiTranslateAndSummarize(title, content) {
+  const contents = [
+    {
+      text: `İngilizce kripto haberini Türkçe'ye çevir ve 3-5 cümleyle özetle sadece cümleyi ver paylaşılacak çünkü. 
+      Başlık: ${title}
+      İçerik: ${content}`
+    }
+  ];
 
-async function fetchNews() {
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents,
+    config: {
+      systemInstruction: "Sen profesyonel bir kripto haber editörüsün. Haberleri Türkçe ve okunabilir şekilde özetle."
+    }
+  });
+
+  return response.text || "Haber çevirisi sırasında hata oluştu.";
+}
+
+// RSS’den haber çekip kanala gönder
+async function fetchAndPostNews() {
   try {
+    const parser = new Parser();
     const feed = await parser.parseURL(RSS_URL);
-    const latest = feed.items[0];
 
-    if (latest.title === lastTitle) return; // aynı haberi atlama
+    if (!feed.items.length) return;
+
+    const latest = feed.items[0];
+    if (latest.title === lastTitle) return; // aynı haberi tekrar atma
     lastTitle = latest.title;
 
     const translated = await aiTranslateAndSummarize(
@@ -35,11 +57,12 @@ async function fetchNews() {
     );
 
     const message = `📰 <b>${latest.title}</b>\n\n${translated}\n\n🔗 Kaynak: ${latest.link}`;
-    await postToTelegram(message);
-    console.log('✅ Haber paylaşıldı:', latest.title);
+
+    await botBalyoz.telegram.sendMessage(CHANNEL_ID, message, { parse_mode: "HTML" });
+    console.log("✅ BotBalyoz haber paylaşıldı:", latest.title);
 
   } catch (err) {
-    console.error('❌ Hata:', err.message);
+    console.error("❌ BotBalyoz Hata:", err.message);
   }
 }
 
@@ -73,10 +96,10 @@ bot.start(async (ctx) => {
 });
 
 
-const burcYorumla = async (pBurcname , ctx) => {
+const burcYorumla = async (pBurcname, ctx) => {
   const telegramId = String(ctx.from.id);
   const user = await User.findOne({ telegramId });
-  
+
   if (!user.credits || user.credits < 10) {
     return ctx.reply("⚠ Yeterli krediniz yok. Burç yorumu için 10 kredi gerekli.");
   }
@@ -113,14 +136,14 @@ const burcYorumla = async (pBurcname , ctx) => {
     await user.save();
   } catch (err) {
     console.log(err);
-  
+
     // Krediyi geri ver
     user.credits += 10;
     user.isProcessing = false;
     await user.save();
     await ctx.reply(`⚠ Burç yorumlanırken hata oluştu. Krediniz iade edildi.`);
   }
-  
+
 }
 
 bot.on("message", async (ctx) => {
@@ -128,13 +151,13 @@ bot.on("message", async (ctx) => {
     const username = ctx.from.username
       ? `@${ctx.from.username}`
       : ctx.from.first_name || "kullanıcı";
-  
+
     // Grupta fal baktırmaya çalışan kişiye yönlendirme mesajı at
     await ctx.reply(
       `${username}, kahve falına baktırmak için lütfen botla özelden konuş 💌\n👉 [TelveciAI botuna git](https://t.me/telveciaibot) ve **/start** yaz.`,
       { parse_mode: "Markdown" }
     );
-  
+
     // Gruba başka hiçbir şey atma
     return;
   }
@@ -193,12 +216,12 @@ bot.on("photo", async (ctx) => {
     await user.save();
   } catch (err) {
     console.log(err);
-  
+
     // Krediyi geri ver
     user.credits += 10;
     user.isProcessing = false;
     await user.save();
-  
+
     const fallback = falMessagesFallback[Math.floor(Math.random() * falMessagesFallback.length)];
     await ctx.reply(`⚠ Fal yorumlanırken hata oluştu. Krediniz iade edildi.\n\nİşte eğlencelik bir yorum:\n\n${fallback}`);
   }
@@ -237,7 +260,7 @@ const contactDataWizard = new Scenes.WizardScene(
       refCode: code,
       telegramId: { $ne: telegramId } // kendi kodu hariç
     });
-    
+
     if (!refCodeFindedUser) {
       await ctx.reply('❌ Referans kodu bulunamadı.');
       return ctx.scene.leave();
@@ -262,6 +285,7 @@ const stage = new Scenes.Stage([contactDataWizard]);
 
 // 🔧 Bu iki satırı ekle:
 const { session } = require("telegraf");
+const Parser = require("rss-parser");
 bot.use(session());
 
 
@@ -278,7 +302,7 @@ bot.on("callback_query", async (ctx) => {
 
   if (!user) return;
 
-  switch(action) {
+  switch (action) {
     case "fal_baktır":
       if (user.credits <= 0) {
         await ctx.answerCbQuery("Kredi yok. Lütfen /odeme ile kredi alın.", { show_alert: true });
@@ -309,20 +333,20 @@ bot.on("callback_query", async (ctx) => {
       );
       break;
 
-    case  "koc" :
-    case  "boga" :
-    case  "ikizler" :
-    case  "yengec" :
-    case  "aslan" :
-    case  "basak" :
-    case  "terazi" :
-    case  "akrep" :
-    case  "yay" :
-    case  "oglak" :
-    case  "kova" :
-    case  "balik" :
+    case "koc":
+    case "boga":
+    case "ikizler":
+    case "yengec":
+    case "aslan":
+    case "basak":
+    case "terazi":
+    case "akrep":
+    case "yay":
+    case "oglak":
+    case "kova":
+    case "balik":
       burcYorumla(action, ctx);
-    break;
+      break;
 
     case "odeme_yap":
       await ctx.answerCbQuery();
@@ -336,11 +360,11 @@ bot.on("callback_query", async (ctx) => {
         ])
       );
       break;
-      
-      case "kredi_durumu":
-        await ctx.answerCbQuery();
-        await ctx.reply(`💰 Kredi durumun: ${user.credits}`);
-        break;
+
+    case "kredi_durumu":
+      await ctx.answerCbQuery();
+      await ctx.reply(`💰 Kredi durumun: ${user.credits}`);
+      break;
 
     case "10_kredi":
     case "50_kredi":
@@ -357,31 +381,31 @@ bot.on("callback_query", async (ctx) => {
       });
       break;
 
-      case "use_ref_code":
-        await ctx.answerCbQuery();
-        await ctx.scene.enter('REFERANCE_SCENE');
+    case "use_ref_code":
+      await ctx.answerCbQuery();
+      await ctx.scene.enter('REFERANCE_SCENE');
       break;
 
-      case "hediye_kredi_davet":
-        let userRefCode = user.refCode;
+    case "hediye_kredi_davet":
+      let userRefCode = user.refCode;
 
-        if (!userRefCode || userRefCode === '') {
-          userRefCode = `${user.username}_${Math.floor(Math.random() * 10000)}`;
-          user.refCode = userRefCode;
-          await user.save();
-        }
+      if (!userRefCode || userRefCode === '') {
+        userRefCode = `${user.username}_${Math.floor(Math.random() * 10000)}`;
+        user.refCode = userRefCode;
+        await user.save();
+      }
 
-        await ctx.reply(`Arkadaşınızı davet ederek 10 kredi kazanabilirsiniz.`);
-        await ctx.reply(`🎟 Referans Kodunuz: ${userRefCode}`);
-        await ctx.answerCbQuery();
-        break;
+      await ctx.reply(`Arkadaşınızı davet ederek 10 kredi kazanabilirsiniz.`);
+      await ctx.reply(`🎟 Referans Kodunuz: ${userRefCode}`);
+      await ctx.answerCbQuery();
+      break;
 
 
-      case "hediye_kredi":
+    case "hediye_kredi":
       const channelUsername = "@telveciai";
       try {
         const member = await ctx.telegram.getChatMember(channelUsername, telegramId);
-        if (["member","administrator","creator"].includes(member.status)) {
+        if (["member", "administrator", "creator"].includes(member.status)) {
           if (!user.isFollowChannel) {
             user.credits += 10;
             user.isFollowChannel = true;
@@ -399,18 +423,18 @@ bot.on("callback_query", async (ctx) => {
             ])
           );
         }
-      } catch(err) {
+      } catch (err) {
         console.log(err);
         await ctx.answerCbQuery("⚠ Kanal kontrol edilirken hata oluştu.", { show_alert: true });
       }
       break;
 
-      
+
 
     case "check_membership":
       try {
         const member = await ctx.telegram.getChatMember("@telveciai", telegramId);
-        if (["member","administrator","creator"].includes(member.status)) {
+        if (["member", "administrator", "creator"].includes(member.status)) {
           if (!user.isFollowChannel) {
             user.credits += 10;
             user.isFollowChannel = true;
@@ -422,7 +446,7 @@ bot.on("callback_query", async (ctx) => {
         } else {
           await ctx.answerCbQuery("⚠ Kanalı hala takip etmiyorsunuz.", { show_alert: true });
         }
-      } catch(err) {
+      } catch (err) {
         console.log(err);
         await ctx.answerCbQuery("⚠ Kanal kontrol edilirken hata oluştu.", { show_alert: true });
       }
@@ -443,7 +467,7 @@ bot.on("successful_payment", async (ctx) => {
     user = await User.create({ telegramId, credits: 0, isFollowChannel: false });
   }
 
-  const amountMap = { "10_kredi": 10, "50_kredi": 50, "100_kredi": 100 , "1000_kredi" : 1000 };
+  const amountMap = { "10_kredi": 10, "50_kredi": 50, "100_kredi": 100, "1000_kredi": 1000 };
   const creditsToAdd = amountMap[ctx.message.successful_payment.invoice_payload] || 0;
 
   user.credits += creditsToAdd;
@@ -455,6 +479,10 @@ bot.on("successful_payment", async (ctx) => {
 // Bot başlat
 const startBot = () => {
   bot.launch();
+  botBalyoz.launch();
+  fetchAndPostNews(); // hemen bir kez gönder
+  setInterval(fetchAndPostNews, 30 * 60 * 1000); // 30 dakikada bir tekrar
+  console.log("🚀 BotBalyoz çalışıyor...");
   console.log("🚀 TelveciAI botu çalışıyor...");
 };
 
