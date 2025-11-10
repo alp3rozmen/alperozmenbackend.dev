@@ -6,6 +6,8 @@ const fetch = require("node-fetch");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API });
+const RSS_URL = "https://www.coindesk.com/arc/outboundfeeds/rss"
+const botBalyoz = new Telegraf(process.env.BOT_TOKEN_CRYPTO);
 
 const falMessagesFallback = [
   "Yakında beklediğin bir haber gelebilir. ☕️",
@@ -14,6 +16,32 @@ const falMessagesFallback = [
   "Kariyerinde küçük ama olumlu bir adım atılacak.",
   "Ev içinde hareketlenme var, güzel gelişmeler olacak."
 ];
+
+botBalyoz.start(async (ctx) => {
+  
+})
+
+async function fetchNews() {
+  try {
+    const feed = await parser.parseURL(RSS_URL);
+    const latest = feed.items[0];
+
+    if (latest.title === lastTitle) return; // aynı haberi atlama
+    lastTitle = latest.title;
+
+    const translated = await aiTranslateAndSummarize(
+      latest.title,
+      latest.contentSnippet || latest.content
+    );
+
+    const message = `📰 <b>${latest.title}</b>\n\n${translated}\n\n🔗 Kaynak: ${latest.link}`;
+    await postToTelegram(message);
+    console.log('✅ Haber paylaşıldı:', latest.title);
+
+  } catch (err) {
+    console.error('❌ Hata:', err.message);
+  }
+}
 
 // Start ve hoşgeldin
 bot.start(async (ctx) => {
