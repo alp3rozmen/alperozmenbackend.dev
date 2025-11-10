@@ -3,7 +3,7 @@ const { Telegraf, Markup, Scenes } = require("telegraf");
 const User = require("../models/UserTeleBot");
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
-
+const dayjs = require("dayjs");
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API });
 const RSS_URL = "https://www.coindesk.com/arc/outboundfeeds/rss"
@@ -44,8 +44,16 @@ async function fetchAndPostNews() {
   try {
     const parser = new Parser();
     const feed = await parser.parseURL(RSS_URL);
-
+    const today = dayjs().format("YYYY-MM-DD"); // bugünün tarihi
+    
     if (!feed.items.length) return;
+
+    const pubDate = dayjs(latest.pubDate || latest.isoDate).format("YYYY-MM-DD");
+    
+    if (pubDate !== today) {
+      console.log("❌ Haber bugün değil, atlanıyor:", latest.title);
+      return; // bugünün haberleri dışında atlama
+    }
 
     const latest = feed.items[0];
     if (latest.title === lastTitle) return; // aynı haberi tekrar atma
@@ -481,7 +489,7 @@ const startBot = () => {
   bot.launch();
   botBalyoz.launch();
   fetchAndPostNews(); // hemen bir kez gönder
-  setInterval(fetchAndPostNews, 30 * 60 * 1000); // 30 dakikada bir tekrar
+  setInterval(fetchAndPostNews, 60 * 60 * 1000); // 60 dakikada bir tekrar
   console.log("🚀 BotBalyoz çalışıyor...");
   console.log("🚀 TelveciAI botu çalışıyor...");
 };
