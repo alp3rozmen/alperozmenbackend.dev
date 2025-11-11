@@ -45,6 +45,7 @@ async function fetchAndPostNews() {
     const parser = new Parser();
     const feed = await parser.parseURL(RSS_URL);
     const today = dayjs().format("YYYY-MM-DD"); // bugünün tarihi
+    const latest = feed.items[0];
     
     if (!feed.items.length) return;
 
@@ -55,7 +56,7 @@ async function fetchAndPostNews() {
       return; // bugünün haberleri dışında atlama
     }
 
-    const latest = feed.items[0];
+    
     if (latest.title === lastTitle) return; // aynı haberi tekrar atma
     lastTitle = latest.title;
 
