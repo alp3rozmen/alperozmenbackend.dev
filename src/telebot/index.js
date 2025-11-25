@@ -488,10 +488,10 @@ bot.on("successful_payment", async (ctx) => {
 // Bot başlat
 const startBot = () => {
   bot.launch();
-  botBalyoz.launch();
-  fetchAndPostNews(); // hemen bir kez gönder
-  setInterval(fetchAndPostNews, 60 * 60 * 1000); // 60 dakikada bir tekrar
-  console.log("🚀 BotBalyoz çalışıyor...");
+  // botBalyoz.launch();
+  // fetchAndPostNews(); // hemen bir kez gönder
+  // setInterval(fetchAndPostNews, 60 * 60 * 1000); // 60 dakikada bir tekrar
+  console.log("🚀 BotBalyoz Kapatıldı...");
   console.log("🚀 TelveciAI botu çalışıyor...");
 };
 
