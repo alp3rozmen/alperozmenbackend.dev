@@ -1,10 +1,9 @@
-const { mainDb } = require('../dbConnection');
-
+const { fortuneDb } = require('../../dbConnection');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User')(mainDb);
-const auth = require('../middleware/auth');
+const User = require('../../models/FortuneTeller/User')(fortuneDb);
+const auth = require('../../middleware/auth');
 
 const router = express.Router();
 
@@ -15,11 +14,19 @@ router.post('/checkIsLoggedIn', auth, (req, res) => {
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, email } = req.body;
+    if (!username || !password || !email) return res.status(400).json({ message: 'Tüm alanları doldurun.' });
     const existingUser = await User.findOne({ username });
+    const existingEmail = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: 'Kullanıcı zaten var.' });
+    if (existingEmail) return res.status(400).json({ message: 'Email zaten var.' });
+    //add all validations
+    if (password.length < 8) return res.status(400).json({ message: 'Şifre en az 8 karakter olmalı.' });
+    if (!email.includes('@')) return res.status(400).json({ message: 'Email geçersiz.' });
+    if (username.length < 3) return res.status(400).json({ message: 'Kullanıcı adı en az 3 karakter olmalı.' });
+    if (username.length > 10) return res.status(400).json({ message: 'Kullanıcı adı en fazla 10 karakter olmalı.' });
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ username, password: hashedPassword });
+    const user = new User({ username, password: hashedPassword, email, credits: 0, createdAt: new Date(), updatedAt: new Date() });
     await user.save();
     res.status(201).json({ message: 'Kayıt başarılı.' });
   } catch (err) {

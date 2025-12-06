@@ -5,4 +5,4 @@ const carsSchema = new mongoose.Schema({
   battery: { type: String, required: true }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Cars', carsSchema, 'cars');
+module.exports = (conn) => conn.model('Cars', carsSchema, 'cars');

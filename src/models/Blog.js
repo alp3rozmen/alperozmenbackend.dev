@@ -6,4 +6,4 @@ const blogSchema = new mongoose.Schema({
   author: { type: String, required: true },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Blog', blogSchema);
+module.exports = (conn) => conn.model('Blog', blogSchema);

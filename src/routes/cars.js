@@ -1,5 +1,7 @@
+const { mainDb } = require('../dbConnection');
+
 const express = require('express');
-const Cars = require('../models/Cars');
+const Cars = require('../models/Cars')(mainDb);
 const auth = require('../middleware/auth');
 
 const router = express.Router();

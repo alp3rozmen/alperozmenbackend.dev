@@ -1,5 +1,7 @@
+const { mainDb } = require('../dbConnection');
+
 const express = require('express');
-const Campaign = require('../models/Campaings');
+const Campaign = require('../models/Campaings')(mainDb);
 const auth = require('../middleware/auth');
 
 const router = express.Router();

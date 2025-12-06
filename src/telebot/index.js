@@ -1,6 +1,7 @@
+const { mainDb } = require('../dbConnection');
 require("dotenv").config();
 const { Telegraf, Markup, Scenes } = require("telegraf");
-const User = require("../models/UserTeleBot");
+const User = require("../models/UserTeleBot")(mainDb);
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
 const dayjs = require("dayjs");

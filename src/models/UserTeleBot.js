@@ -1,15 +1,15 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
   telegramId: { type: String, required: true, unique: true },
   username: String,
-  credits: { type: Number, default: 0 },       // <--- kredi sayısını burada tutuyoruz
+  credits: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  lastFalAt: Date ,
+  lastFalAt: Date,
   isFollowChannel: Boolean,
-  isProcessing : Boolean,
+  isProcessing: Boolean,
   refCode: { type: String, unique: true, sparse: true },
-  isUsedRefCode : Boolean                             // opsiyonel: son fal zamanı (rate-limit için)
+  isUsedRefCode: Boolean,
 });
 
-module.exports = mongoose.model("TelveciAIUser", userSchema);
+module.exports = (conn) => conn.model("TelveciAIUser", userSchema);
