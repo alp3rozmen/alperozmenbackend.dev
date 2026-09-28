@@ -1,7 +1,7 @@
-const { mainDb } = require('../dbConnection');
 require("dotenv").config();
 const { Telegraf, Markup, Scenes } = require("telegraf");
-const User = require("../models/UserTeleBot")(mainDb);
+// const { mainDb } = require('../dbConnection');
+// const User = require("../models/UserTeleBot")(mainDb);
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
 const dayjs = require("dayjs");
@@ -78,31 +78,31 @@ async function fetchAndPostNews() {
 
 // Start ve hoşgeldin
 bot.start(async (ctx) => {
-  const telegramId = String(ctx.from.id);
-  const username = ctx.from.username;
+  // const telegramId = String(ctx.from.id);
+  // const username = ctx.from.username;
 
-  let user = await User.findOne({ telegramId });
-  if (!user) {
-    user = await User.create({ telegramId, username, credits: 0, isFollowChannel: false });
-  } else {
-    user.username = username;
-    await user.save();
-  }
+  // let user = await User.findOne({ telegramId });
+  // if (!user) {
+  //   user = await User.create({ telegramId, username, credits: 0, isFollowChannel: false });
+  // } else {
+  //   user.username = username;
+  //   await user.save();
+  // }
 
-  const welcomeMessage = `Merhaba ${username || "misafir"}! ☕ TelveciAI’ye hoş geldin.`;
+  // const welcomeMessage = `Merhaba ${username || "misafir"}! ☕ TelveciAI’ye hoş geldin.`;
 
-  await ctx.reply(
-    welcomeMessage,
-    Markup.inlineKeyboard([
-      [Markup.button.callback("📸 Fal Baktır (10 Kredi)", "fal_baktır")],
-      [Markup.button.callback("♍ Burç Yorumu (10 Kredi)", "burc_yorumu")],
-      [Markup.button.callback("💰 Kredi Durumu", "kredi_durumu")],
-      [Markup.button.callback("💳 Kredi Satın Al", "odeme_yap")],
-      [Markup.button.callback("🎁 Kanalımıza Katıl 10 Kredi Kazan", "hediye_kredi")],
-      [Markup.button.callback("🎁 Arkadaşını Davet Et 10 Kredi Kazan", "hediye_kredi_davet")],
-      [Markup.button.callback("🎁 Referans Kodu Kullan", "use_ref_code")]
-    ])
-  );
+  // await ctx.reply(
+  //   welcomeMessage,
+  //   Markup.inlineKeyboard([
+  //     [Markup.button.callback("📸 Fal Baktır (10 Kredi)", "fal_baktır")],
+  //     [Markup.button.callback("♍ Burç Yorumu (10 Kredi)", "burc_yorumu")],
+  //     [Markup.button.callback("💰 Kredi Durumu", "kredi_durumu")],
+  //     [Markup.button.callback("💳 Kredi Satın Al", "odeme_yap")],
+  //     [Markup.button.callback("🎁 Kanalımıza Katıl 10 Kredi Kazan", "hediye_kredi")],
+  //     [Markup.button.callback("🎁 Arkadaşını Davet Et 10 Kredi Kazan", "hediye_kredi_davet")],
+  //     [Markup.button.callback("🎁 Referans Kodu Kullan", "use_ref_code")]
+  //   ])
+  // );
 });
 
 
@@ -488,12 +488,12 @@ bot.on("successful_payment", async (ctx) => {
 
 // Bot başlat
 const startBot = () => {
-  bot.launch();
+  // bot.launch();
   // botBalyoz.launch();
   // fetchAndPostNews(); // hemen bir kez gönder
   // setInterval(fetchAndPostNews, 60 * 60 * 1000); // 60 dakikada bir tekrar
   console.log("🚀 BotBalyoz Kapatıldı...");
-  console.log("🚀 TelveciAI botu çalışıyor...");
+  console.log("🚀 TelveciAI botu Kapatıldı...");
 };
 
 module.exports = { bot, startBot };
