@@ -1,9 +1,4 @@
-const mongoose = require('mongoose');
+const crud = require('./crud');
+const { db } = require('../config/db');
 
-const blogSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  content: { type: String, required: true },
-  author: { type: String, required: true },
-}, { timestamps: true });
-
-module.exports = (conn) => conn.model('Blog', blogSchema);
+module.exports = crud(db, 'blogs', ['title', 'content', 'author']);

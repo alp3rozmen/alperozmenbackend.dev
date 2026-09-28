@@ -1,7 +1,5 @@
 require("dotenv").config();
 const { Telegraf, Markup, Scenes } = require("telegraf");
-// const { mainDb } = require('../dbConnection');
-// const User = require("../models/UserTeleBot")(mainDb);
 const { GoogleGenAI } = require("@google/genai");
 const fetch = require("node-fetch");
 const dayjs = require("dayjs");
@@ -86,7 +84,7 @@ bot.start(async (ctx) => {
   //   user = await User.create({ telegramId, username, credits: 0, isFollowChannel: false });
   // } else {
   //   user.username = username;
-  //   await user.save();
+  //   await User.save(user);
   // }
 
   // const welcomeMessage = `Merhaba ${username || "misafir"}! ☕ TelveciAI’ye hoş geldin.`;
@@ -120,7 +118,7 @@ const burcYorumla = async (pBurcname, ctx) => {
 
   user.credits -= 10;
   user.isProcessing = true;
-  await user.save();
+  await User.save(user);
 
   const contents = [
     {
@@ -143,14 +141,14 @@ const burcYorumla = async (pBurcname, ctx) => {
     await ctx.reply(`🌙 TelveciAI yorumu:\n\n${aiComment}`);
     await ctx.reply(`🌙 Kalan Krediniz: ${user.credits}`);
     user.isProcessing = false;
-    await user.save();
+    await User.save(user);
   } catch (err) {
     console.log(err);
 
     // Krediyi geri ver
     user.credits += 10;
     user.isProcessing = false;
-    await user.save();
+    await User.save(user);
     await ctx.reply(`⚠ Burç yorumlanırken hata oluştu. Krediniz iade edildi.`);
   }
 
@@ -188,7 +186,7 @@ bot.on("photo", async (ctx) => {
 
   user.credits -= 10;
   user.isProcessing = true;
-  await user.save();
+  await User.save(user);
 
   const photo = ctx.message.photo[ctx.message.photo.length - 1];
   const fileLink = await ctx.telegram.getFileLink(photo.file_id);
@@ -223,14 +221,14 @@ bot.on("photo", async (ctx) => {
     const aiComment = response.text || falMessagesFallback[Math.floor(Math.random() * falMessagesFallback.length)];
     await ctx.reply(`🌙 TelveciAI yorumu:\n\n${aiComment}`);
     user.isProcessing = false;
-    await user.save();
+    await User.save(user);
   } catch (err) {
     console.log(err);
 
     // Krediyi geri ver
     user.credits += 10;
     user.isProcessing = false;
-    await user.save();
+    await User.save(user);
 
     const fallback = falMessagesFallback[Math.floor(Math.random() * falMessagesFallback.length)];
     await ctx.reply(`⚠ Fal yorumlanırken hata oluştu. Krediniz iade edildi.\n\nİşte eğlencelik bir yorum:\n\n${fallback}`);
@@ -266,10 +264,7 @@ const contactDataWizard = new Scenes.WizardScene(
       return ctx.scene.leave();
     }
 
-    const refCodeFindedUser = await User.findOne({
-      refCode: code,
-      telegramId: { $ne: telegramId } // kendi kodu hariç
-    });
+    const refCodeFindedUser = await User.findByRefCode(code, telegramId); // kendi kodu hariç
 
     if (!refCodeFindedUser) {
       await ctx.reply('❌ Referans kodu bulunamadı.');
@@ -279,10 +274,10 @@ const contactDataWizard = new Scenes.WizardScene(
     // Başarılı
     user.credits += 10;
     user.isUsedRefCode = true;
-    await user.save();
+    await User.save(user);
 
     refCodeFindedUser.credits += 10; // referans veren kişi de ödül alabilir
-    await refCodeFindedUser.save();
+    await User.save(refCodeFindedUser);
 
     await ctx.reply(`💰 Tebrikler! 10 kredi hesabınıza eklendi.\n🔹 Mevcut krediniz: ${user.credits}`);
     return ctx.scene.leave();
@@ -402,7 +397,7 @@ bot.on("callback_query", async (ctx) => {
       if (!userRefCode || userRefCode === '') {
         userRefCode = `${user.username}_${Math.floor(Math.random() * 10000)}`;
         user.refCode = userRefCode;
-        await user.save();
+        await User.save(user);
       }
 
       await ctx.reply(`Arkadaşınızı davet ederek 10 kredi kazanabilirsiniz.`);
@@ -419,7 +414,7 @@ bot.on("callback_query", async (ctx) => {
           if (!user.isFollowChannel) {
             user.credits += 10;
             user.isFollowChannel = true;
-            await user.save();
+            await User.save(user);
             await ctx.answerCbQuery("🎁 10 kredi eklendi!", { show_alert: true });
           } else {
             await ctx.answerCbQuery("Bu ödülü zaten almışsınız.", { show_alert: true });
@@ -448,7 +443,7 @@ bot.on("callback_query", async (ctx) => {
           if (!user.isFollowChannel) {
             user.credits += 10;
             user.isFollowChannel = true;
-            await user.save();
+            await User.save(user);
             await ctx.answerCbQuery("🎁 10 kredi eklendi!", { show_alert: true });
           } else {
             await ctx.answerCbQuery("Bu ödülü zaten almışsınız.", { show_alert: true });
@@ -481,7 +476,7 @@ bot.on("successful_payment", async (ctx) => {
   const creditsToAdd = amountMap[ctx.message.successful_payment.invoice_payload] || 0;
 
   user.credits += creditsToAdd;
-  await user.save();
+  await User.save(user);
 
   await ctx.reply(`💰 Ödeme alındı! ${creditsToAdd} kredi hesabına eklendi.`);
 });

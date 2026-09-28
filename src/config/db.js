@@ -1,27 +1,25 @@
-const mongoose = require('mongoose');
+const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-let mainDb = null;
-let fortuneDb = null;
+// Havuz lazy bağlanır; ilk sorguda bağlantı açılır.
+const db = mysql.createPool({
+  host: process.env.MYSQL_HOST || 'localhost',
+  port: Number(process.env.MYSQL_PORT) || 3306,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  waitForConnections: true,
+  connectionLimit: 10,
+  charset: 'utf8mb4'
+});
 
-const startDbConnections = () => {
-  if (process.env.MONGODB_URI) {
-    mainDb = mongoose.createConnection(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
-    mainDb.on('error', console.error.bind(console, 'Main MongoDB connection error:'));
-    mainDb.once('open', () => console.log('Main MongoDB connected'));
-  }
-
-  if (process.env.MONGOFORT_URI) {
-    fortuneDb = mongoose.createConnection(process.env.MONGOFORT_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
-    fortuneDb.on('error', console.error.bind(console, 'Fortune MongoDB connection error:'));
-    fortuneDb.once('open', () => console.log('Fortune MongoDB connected'));
+const startDbConnection = async () => {
+  try {
+    await db.query('SELECT 1');
+    console.log('MySQL connected');
+  } catch (err) {
+    console.error('MySQL connection error:', err.message);
   }
 };
 
-module.exports = { get mainDb() { return mainDb; }, get fortuneDb() { return fortuneDb; }, startDbConnections };
+module.exports = { db, startDbConnection };

@@ -1,8 +1,13 @@
-const mongoose = require('mongoose');
+const { db } = require('../config/db');
 
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-}, { timestamps: true });
+module.exports = {
+  findByUsername: async (username) => {
+    const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+    return rows[0] || null;
+  },
 
-module.exports = (conn) => conn.model('User', userSchema);
+  create: async ({ username, password }) => {
+    const [result] = await db.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, password]);
+    return result.insertId;
+  }
+};
