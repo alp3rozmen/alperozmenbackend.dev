@@ -2,12 +2,12 @@ const gate = require('./gate.api');
 const telegram = require('./telegram');
 const { evaluateBreakout, isMarketHealthy } = require('./strategy');
 const CryptoSignal = require('../../models/CryptoSignal');
+const { db } = require('../../config/db');
 
 const DEFAULT_SETTINGS = {
   intervalMin: 5,          // tarama sıklığı (dakika)
   timeframe: '1h',         // sinyal mum aralığı
   minVolume24h: 1_000_000, // min. 24s USDT hacmi
-  maxCandidates: 80,       // tur başına mum verisi çekilecek çift sayısı
   maxChange24h: 30,        // 24s'te bundan fazla pompalanmışları kovalama
   breakoutLookback: 20,
   minVolumeRatio: 2,
@@ -31,8 +31,6 @@ let timer = null;
 let settings = { ...DEFAULT_SETTINGS };
 let inFlight = false;
 let lastScan = null; // { at, candidates, signals, marketHealthy, durationMs }
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function fmt(value) {
   if (value >= 1) return Number(value.toFixed(4)).toString();
@@ -62,22 +60,20 @@ async function mapLimit(items, limit, fn) {
 }
 
 function pickCandidates(tickers, skipPairs) {
-  const liquid = tickers.filter((t) => {
+  return tickers.filter((t) => {
     if (!t.currency_pair.endsWith('_USDT')) return false;
     if (LEVERAGED.test(t.currency_pair) || EXCLUDED.has(t.currency_pair.replace('_USDT', ''))) return false;
     if (skipPairs.has(t.currency_pair)) return false;
     const change = Number(t.change_percentage);
     return Number(t.quote_volume) >= settings.minVolume24h && change < settings.maxChange24h;
   });
+}
 
-  // Yarısı en likit, yarısı günün yükselenleri
-  const half = Math.ceil(settings.maxCandidates / 2);
-  const byVolume = [...liquid].sort((a, b) => Number(b.quote_volume) - Number(a.quote_volume)).slice(0, half);
-  const byChange = [...liquid].sort((a, b) => Number(b.change_percentage) - Number(a.change_percentage)).slice(0, half);
-
-  const map = new Map();
-  for (const t of [...byVolume, ...byChange]) map.set(t.currency_pair, t);
-  return [...map.values()];
+// Sinyal sadece mum kapanışında oluşabilir; kapanıştan sonraki kısa pencere dışında aramaya gerek yok
+function inSignalWindow() {
+  const tf = TIMEFRAME_MS[settings.timeframe];
+  const sinceClose = Date.now() % tf;
+  return sinceClose <= settings.intervalMin * 2 * 60_000;
 }
 
 async function closeSignal(signal, status, exitPrice, extra) {
@@ -130,6 +126,8 @@ async function updateOpenSignals(tickerMap) {
 }
 
 async function findNewSignals(tickers) {
+  if (!inSignalWindow()) return { marketHealthy: null, candidates: 0, signals: 0, waiting: true };
+
   const btc = (await gate.fetchCandles('BTC_USDT', settings.timeframe, 100)).filter((c) => c.closed);
   const marketHealthy = isMarketHealthy(btc);
   if (!marketHealthy) return { marketHealthy, candidates: 0, signals: 0 };
@@ -191,8 +189,15 @@ async function tick() {
   if (inFlight) return { skipped: true };
   inFlight = true;
   const started = Date.now();
+  const conn = await db.getConnection().catch((err) => {
+    inFlight = false;
+    throw err;
+  });
 
   try {
+    const [[lock]] = await conn.query("SELECT GET_LOCK('crypto_tick', 0) AS ok");
+    if (!lock.ok) return { skipped: true };
+
     const tickers = await gate.fetchTickers();
     const tickerMap = new Map(tickers.map((t) => [t.currency_pair, t]));
 
@@ -207,8 +212,18 @@ async function tick() {
     await CryptoSignal.saveState({ last_error: String(err.message).slice(0, 500) }).catch(() => {});
     throw err;
   } finally {
+    await conn.query("SELECT RELEASE_LOCK('crypto_tick')").catch(() => {});
+    conn.release();
     inFlight = false;
   }
+}
+
+// Cron script'i için: bot panelden açık bırakıldıysa kayıtlı ayarlarla tek tur tarar
+async function tickIfRunning() {
+  const state = await CryptoSignal.getState();
+  if (!state?.running) return { skipped: true, reason: 'bot durdurulmuş' };
+  settings = { ...DEFAULT_SETTINGS, ...state.settings };
+  return tick();
 }
 
 function schedule() {
@@ -253,7 +268,8 @@ async function resumeIfRunning() {
 async function status() {
   const state = await CryptoSignal.getState();
   return {
-    running: !!timer,
+    // Cron script'i ayrı süreçte çalışabildiği için durum DB'den okunur
+    running: !!state?.running,
     settings,
     lastScan,
     lastScanAt: state?.last_scan_at || null,
@@ -262,4 +278,4 @@ async function status() {
   };
 }
 
-module.exports = { start, stop, tick, status, resumeIfRunning, DEFAULT_SETTINGS };
+module.exports = { start, stop, tick, tickIfRunning, status, resumeIfRunning, DEFAULT_SETTINGS };
