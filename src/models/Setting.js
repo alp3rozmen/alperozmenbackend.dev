@@ -1,16 +1,11 @@
 const { db } = require('../config/db');
 
 // Panelden düzenlenebilen ayarlar. `env`: DB'de değer yoksa kullanılacak ortam değişkenleri.
-// `default`: ne DB'de ne .env'de değer yoksa kullanılır. `secret`: panelde tam değeri gösterilmez.
+// `secret`: panelde tam değeri gösterilmez.
 const DEFINITIONS = {
   crypto_tg_bot_token: { env: ['CRYPTO_TG_BOT_TOKEN', 'BOT_TOKEN_CRYPTO'], secret: true },
   crypto_tg_chat_id: { env: ['CRYPTO_TG_CHAT_ID'], secret: false },
   crypto_cron_key: { env: ['CRYPTO_CRON_KEY'], secret: true },
-  gemini_api_key: { env: ['GEMINI_API'], secret: true },
-  gemini_text_model: { env: [], secret: false, default: 'gemini-2.5-flash' },
-  gemini_image_model: { env: [], secret: false, default: 'gemini-3-pro-image' },
-  dolap_brand_name: { env: [], secret: false, default: 'ALREY 3D' },
-  filament_price_per_kg: { env: [], secret: false },
 };
 
 // Telegram her mesajda ayar okuduğu için kısa süreli önbellek
@@ -41,7 +36,7 @@ async function get(key) {
   } catch (err) {
     console.error('Ayarlar okunamadı:', err.message);
   }
-  return stored || envValue(key) || DEFINITIONS[key].default || null;
+  return stored || envValue(key);
 }
 
 // Panel için: gizli değerlerin sadece son 4 karakteri döner
@@ -56,7 +51,6 @@ async function listForPanel() {
       hint: def.secret && value ? '••••' + value.slice(-4) : null,
       isSet: !!value,
       fromEnv: !value && !!envValue(key),
-      default: def.default || null,
     };
   });
 }
