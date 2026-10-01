@@ -87,3 +87,34 @@ CREATE TABLE IF NOT EXISTS tiktok_videos (
   INDEX idx_status (status),
   INDEX idx_idea (idea_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Kullanıcının yüklediği kendi çekimleri (timelapse vb.); storage/tiktok/clips altında
+CREATE TABLE IF NOT EXISTS tiktok_clips (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  idea_id INT UNSIGNED NOT NULL,
+  idea_index TINYINT UNSIGNED NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  original_name VARCHAR(255) NULL,
+  duration DECIMAL(8,2) NOT NULL,
+  has_audio TINYINT(1) NOT NULL DEFAULT 0,
+  target_seconds DECIMAL(4,1) NOT NULL DEFAULT 4,
+  sort_order INT NOT NULL DEFAULT 0,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_idea (idea_id, idea_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Hook klibi + kullanıcı klipleri + altyazılarla birleştirilmiş son videolar; storage/tiktok/renders altında
+CREATE TABLE IF NOT EXISTS tiktok_renders (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  idea_id INT UNSIGNED NOT NULL,
+  idea_index TINYINT UNSIGNED NOT NULL,
+  hook_video_id INT UNSIGNED NULL,
+  status ENUM('pending','success','fail') NOT NULL DEFAULT 'pending',
+  file_path VARCHAR(255) NULL,
+  duration DECIMAL(8,2) NULL,
+  error VARCHAR(500) NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completedAt DATETIME NULL,
+  INDEX idx_idea (idea_id, idea_index),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

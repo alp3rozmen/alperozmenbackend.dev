@@ -5,7 +5,7 @@ const kie = require('./kie.api');
 const telegram = require('../telegram');
 const Setting = require('../../models/Setting');
 const TiktokVideo = require('../../models/TiktokVideo');
-const TiktokIdea = require('../../models/TiktokIdea');
+const { ideaItem, buildCaption } = require('./caption');
 
 const STORAGE_DIR = path.join(__dirname, '..', '..', '..', 'storage', 'tiktok');
 const POLL_MS = 20_000;
@@ -44,15 +44,12 @@ async function download(url, target) {
 }
 
 async function notifySuccess(video, sourceUrl) {
-  const idea = video.idea_id ? await TiktokIdea.findById(video.idea_id) : null;
-  const item = idea?.ideas?.[video.idea_index];
-  const caption = [
+  const item = await ideaItem(video.idea_id, video.idea_index);
+  const caption = buildCaption(
     `🎬 Hook klibi hazır (#${video.id}, ${video.duration} sn)`,
-    item && `\n🪝 ${item.hookText}`,
-    item && `\n${item.caption}`,
-    item && `\n${item.hashtags.join(' ')}`,
-    `\n🔗 Yedek link (24 saat): ${sourceUrl}`,
-  ].filter(Boolean).join('\n');
+    item,
+    `🔗 Yedek link (24 saat): ${sourceUrl}`
+  );
   await telegram.sendVideo(filePathOf(video), caption);
 }
 

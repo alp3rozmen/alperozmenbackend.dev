@@ -3,6 +3,9 @@ const gemini = require('../services/tiktok/gemini');
 const videoService = require('../services/tiktok/video.service');
 const TiktokIdea = require('../models/TiktokIdea');
 const TiktokVideo = require('../models/TiktokVideo');
+const TiktokClip = require('../models/TiktokClip');
+const TiktokRender = require('../models/TiktokRender');
+const renderService = require('../services/tiktok/render.service');
 
 const DURATIONS = [6, 8, 10, 15];
 const RESOLUTIONS = ['480p', '720p'];
@@ -22,7 +25,7 @@ exports.createIdeas = async (req, res) => {
   try {
     const result = await gemini.generateIdeas({ productName, notes, photos, count });
     const id = await TiktokIdea.create({ productName, notes, ...result });
-    res.status(201).json({ ...(await TiktokIdea.findById(id)), videos: [] });
+    res.status(201).json({ ...(await TiktokIdea.findById(id)), videos: [], clips: [], renders: [] });
   } catch (err) {
     fail(res, err, 'Fikirler üretilemedi');
   }
@@ -40,7 +43,12 @@ exports.getIdea = async (req, res) => {
   try {
     const idea = await TiktokIdea.findById(Number(req.params.id));
     if (!idea) return res.status(404).json({ message: 'Fikir bulunamadı.' });
-    res.json({ ...idea, videos: await TiktokVideo.listByIdea(idea.id) });
+    res.json({
+      ...idea,
+      videos: await TiktokVideo.listByIdea(idea.id),
+      clips: await TiktokClip.listByIdea(idea.id),
+      renders: await TiktokRender.listByIdea(idea.id),
+    });
   } catch (err) {
     fail(res, err, 'Fikir alınamadı');
   }
@@ -50,6 +58,8 @@ exports.removeIdea = async (req, res) => {
   try {
     const id = Number(req.params.id);
     for (const video of await TiktokVideo.listByIdea(id)) await videoService.remove(video.id);
+    for (const clip of await TiktokClip.listByIdea(id)) await renderService.removeClip(clip.id);
+    for (const render of await TiktokRender.listByIdea(id)) await renderService.removeRender(render.id);
     const removed = await TiktokIdea.remove(id);
     if (!removed) return res.status(404).json({ message: 'Fikir bulunamadı.' });
     res.json({ message: 'Fikir silindi.' });
@@ -118,5 +128,127 @@ exports.usage = async (req, res) => {
     res.json(await videoService.monthlyUsage());
   } catch (err) {
     fail(res, err, 'Kullanım alınamadı');
+  }
+};
+
+// --- Kendi çekimleri ve birleştirme ---
+
+const MAX_CLIPS = 8;
+
+exports.uploadClips = async (req, res) => {
+  const ideaId = Number(req.params.id);
+  const ideaIndex = Number(req.body.ideaIndex);
+  const files = req.files || [];
+  const cleanupFiles = () => Promise.all(files.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+
+  try {
+    const idea = await TiktokIdea.findById(ideaId);
+    if (!idea || !Number.isInteger(ideaIndex) || !idea.ideas[ideaIndex]) {
+      await cleanupFiles();
+      return res.status(404).json({ message: 'Fikir bulunamadı.' });
+    }
+    const existing = await TiktokClip.listByIdea(ideaId, ideaIndex);
+    if (existing.length + files.length > MAX_CLIPS) {
+      await cleanupFiles();
+      return res.status(400).json({ message: `Bir fikre en fazla ${MAX_CLIPS} klip yüklenebilir.` });
+    }
+
+    const added = [];
+    const errors = [];
+    for (const file of files) {
+      try {
+        added.push(await renderService.addClip(file, { ideaId, ideaIndex }));
+      } catch (err) {
+        errors.push(`${file.originalname}: ${err.message}`);
+      }
+    }
+    res.status(added.length ? 201 : 400).json({ clips: added, errors });
+  } catch (err) {
+    await cleanupFiles();
+    fail(res, err, 'Klipler yüklenemedi');
+  }
+};
+
+exports.updateClip = async (req, res) => {
+  try {
+    const clip = await TiktokClip.findById(Number(req.params.id));
+    if (!clip) return res.status(404).json({ message: 'Klip bulunamadı.' });
+    const fields = {};
+    const target = Number(req.body.targetSeconds);
+    if (Number.isFinite(target)) fields.target_seconds = Math.min(15, Math.max(1, target));
+    if (Number.isInteger(req.body.sortOrder)) fields.sort_order = req.body.sortOrder;
+    if (Object.keys(fields).length) await TiktokClip.update(clip.id, fields);
+    res.json(await TiktokClip.findById(clip.id));
+  } catch (err) {
+    fail(res, err, 'Klip güncellenemedi');
+  }
+};
+
+exports.removeClip = async (req, res) => {
+  try {
+    const removed = await renderService.removeClip(Number(req.params.id));
+    if (!removed) return res.status(404).json({ message: 'Klip bulunamadı.' });
+    res.json({ message: 'Klip silindi.' });
+  } catch (err) {
+    fail(res, err, 'Klip silinemedi');
+  }
+};
+
+exports.clipFile = async (req, res) => {
+  try {
+    const clip = await TiktokClip.findById(Number(req.params.id));
+    if (!clip) return res.status(404).json({ message: 'Klip bulunamadı.' });
+    res.sendFile(clip.file_name, { root: renderService.CLIPS_DIR, headers: { 'Content-Type': 'video/mp4' } });
+  } catch (err) {
+    fail(res, err, 'Klip alınamadı');
+  }
+};
+
+exports.createRender = async (req, res) => {
+  const ideaId = Number(req.body.ideaId);
+  const ideaIndex = Number(req.body.ideaIndex);
+  try {
+    const idea = await TiktokIdea.findById(ideaId);
+    if (!idea || !Number.isInteger(ideaIndex) || !idea.ideas[ideaIndex]) return res.status(404).json({ message: 'Fikir bulunamadı.' });
+    let hookVideoId = Number(req.body.hookVideoId) || null;
+    if (hookVideoId) {
+      const hook = await TiktokVideo.findById(hookVideoId);
+      if (!hook?.file_path) return res.status(400).json({ message: 'Seçilen hook klibinin dosyası yok.' });
+    }
+    const clips = await TiktokClip.listByIdea(ideaId, ideaIndex);
+    if (!hookVideoId && clips.length === 0) return res.status(400).json({ message: 'Önce hook klibi üret veya kendi videolarını yükle.' });
+    res.status(201).json(await renderService.start({ ideaId, ideaIndex, hookVideoId }));
+  } catch (err) {
+    fail(res, err, 'Video oluşturma başlatılamadı');
+  }
+};
+
+exports.getRender = async (req, res) => {
+  try {
+    const render = await TiktokRender.findById(Number(req.params.id));
+    if (!render) return res.status(404).json({ message: 'Video bulunamadı.' });
+    res.json(render);
+  } catch (err) {
+    fail(res, err, 'Video durumu alınamadı');
+  }
+};
+
+exports.renderFile = async (req, res) => {
+  try {
+    const render = await TiktokRender.findById(Number(req.params.id));
+    if (!render?.file_path) return res.status(404).json({ message: 'Dosya yok (henüz hazır değil veya 14 günü geçtiği için silindi).' });
+    res.sendFile(renderService.renderPath(render), { headers: { 'Content-Type': 'video/mp4' } });
+  } catch (err) {
+    fail(res, err, 'Dosya alınamadı');
+  }
+};
+
+exports.removeRender = async (req, res) => {
+  try {
+    const removed = await renderService.removeRender(Number(req.params.id));
+    if (!removed) return res.status(404).json({ message: 'Video bulunamadı.' });
+    res.json({ message: 'Video silindi.' });
+  } catch (err) {
+    fail(res, err, 'Video silinemedi');
   }
 };
