@@ -1,5 +1,5 @@
 const gate = require('./gate.api');
-const telegram = require('./telegram');
+const telegram = require('../telegram');
 const { evaluateBreakout, isMarketHealthy } = require('./strategy');
 const CryptoSignal = require('../../models/CryptoSignal');
 const { db } = require('../../config/db');

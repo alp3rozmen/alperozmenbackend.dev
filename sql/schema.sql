@@ -56,3 +56,34 @@ CREATE TABLE IF NOT EXISTS app_settings (
   `value` TEXT NULL,
   updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- TikTok İçerik Stüdyosu: Gemini'nin ürettiği video fikirleri
+CREATE TABLE IF NOT EXISTS tiktok_ideas (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_name VARCHAR(200) NOT NULL,
+  notes TEXT NULL,
+  research TEXT NULL,
+  ideas MEDIUMTEXT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- kie.ai ile üretilen hook klipleri; dosyalar storage/tiktok altında, 14 gün sonra silinir
+CREATE TABLE IF NOT EXISTS tiktok_videos (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  idea_id INT UNSIGNED NULL,
+  idea_index TINYINT UNSIGNED NULL,
+  model VARCHAR(100) NOT NULL,
+  prompt TEXT NOT NULL,
+  duration TINYINT UNSIGNED NOT NULL,
+  resolution VARCHAR(10) NOT NULL,
+  kie_task_id VARCHAR(100) NULL,
+  status ENUM('pending','success','fail') NOT NULL DEFAULT 'pending',
+  credits DECIMAL(10,2) NULL,
+  source_url TEXT NULL,
+  file_path VARCHAR(255) NULL,
+  error VARCHAR(500) NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completedAt DATETIME NULL,
+  INDEX idx_status (status),
+  INDEX idx_idea (idea_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

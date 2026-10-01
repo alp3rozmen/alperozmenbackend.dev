@@ -1,5 +1,5 @@
 const scanner = require('../services/crypto/scanner.service');
-const telegram = require('../services/crypto/telegram');
+const telegram = require('../services/telegram');
 const CryptoSignal = require('../models/CryptoSignal');
 
 // Body'den sadece bilinen ayarları al; timeframe dışındakiler sayı olmalı
