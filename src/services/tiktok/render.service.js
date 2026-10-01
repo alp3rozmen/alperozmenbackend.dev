@@ -84,7 +84,7 @@ function assTime(seconds) {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`;
 }
 
-// Yazılar üst-orta bölgede: TikTok'un alt (açıklama) ve sağ (butonlar) alanına denk gelmesin
+// Yazılar dikeyde ortada (üstte ürünün/karakterin yüzünü kapatıyordu); sağ marj TikTok butonlarına denk gelmesin diye geniş
 function buildAss(events) {
   const header = [
     '[Script Info]',
@@ -95,8 +95,8 @@ function buildAss(events) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Hook,Noto Sans Black,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,5,2,8,70,90,230,1',
-    'Style: Text,Noto Sans Black,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,4,2,8,70,90,260,1',
+    'Style: Hook,Noto Sans Black,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,5,2,5,70,90,0,1',
+    'Style: Text,Noto Sans Black,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,4,2,5,70,90,0,1',
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
