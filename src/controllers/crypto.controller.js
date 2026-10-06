@@ -1,26 +1,14 @@
 const scanner = require('../services/crypto/scanner.service');
 const telegram = require('../services/telegram');
-const CryptoSignal = require('../models/CryptoSignal');
 
-// Body'den sadece bilinen ayarları al; timeframe dışındakiler sayı olmalı
-function pickSettings(body = {}) {
-  const result = {};
-  for (const key of Object.keys(scanner.DEFAULT_SETTINGS)) {
-    if (body[key] === undefined) continue;
-    if (key === 'timeframe') {
-      if (['5m', '15m', '30m', '1h', '4h'].includes(body[key])) result[key] = body[key];
-      continue;
-    }
-    const value = Number(body[key]);
-    if (Number.isFinite(value) && value > 0) result[key] = value;
-  }
-  if (result.intervalMin) result.intervalMin = Math.max(1, result.intervalMin);
-  return result;
-}
-
+// Panelden sadece mum aralığı seçilir; diğer ayarlar backtest edilmiş varsayılanlardan gelir
 exports.start = async (req, res) => {
+  const timeframe = req.body?.timeframe;
+  if (timeframe !== undefined && !scanner.TIMEFRAME_PRESETS[timeframe]) {
+    return res.status(400).json({ message: `Mum aralığı şunlardan biri olmalı: ${Object.keys(scanner.TIMEFRAME_PRESETS).join(', ')}` });
+  }
   try {
-    const settings = await scanner.start(pickSettings(req.body));
+    const settings = await scanner.start({ timeframe });
     res.json({ message: 'Kripto tarayıcı başlatıldı', settings });
   } catch (err) {
     res.status(500).json({ message: 'Başlatılamadı', error: err.message });
@@ -56,7 +44,7 @@ exports.status = async (req, res) => {
 exports.signals = async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
-    res.json(await CryptoSignal.list({ status: req.query.status, limit }));
+    res.json(await scanner.listSignals({ status: req.query.status, limit }));
   } catch (err) {
     res.status(500).json({ message: 'Sinyaller alınamadı', error: err.message });
   }
