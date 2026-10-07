@@ -262,7 +262,8 @@ function productVideoView(v) {
   const { photos, ...rest } = v;
   return {
     ...rest,
-    scenes: (v.scenes || []).map((s) => ({ state: s.state, error: s.error || null })),
+    // Eski kayıtlarda kind yok; hepsi AI sahnesiydi
+    scenes: (v.scenes || []).map((s) => ({ kind: s.kind || 'ai', state: s.state, error: s.error || null })),
   };
 }
 
@@ -278,6 +279,7 @@ exports.createProductVideo = async (req, res) => {
       notes: String(req.body.notes || '').slice(0, 2000),
       photos,
       autoPublish: req.body.autoPublish === 'true',
+      quality: req.body.quality || 'economy',
     });
     res.status(201).json(productVideoView(video));
   } catch (err) {

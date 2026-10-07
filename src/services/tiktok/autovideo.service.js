@@ -15,6 +15,8 @@ const ProductVideo = require('../../models/ProductVideo');
 // Fotoğraf → Gemini senaryosu → 3 Grok sahnesi → ffmpeg ile birleştirme + Türkçe yazılar → Telegram (+ Instagram)
 const MODEL = 'grok-imagine/image-to-video'; // 7'ye kadar referans fotoğraf alır (@image1, @image2)
 const SCENE_SECONDS = 6;
+// Ekonomik: sadece 1. sahne (dönen tanıtım) AI, diğerleri fotoğraftan ücretsiz (~1/3 kredi). Standart: 3 AI sahne.
+const QUALITIES = ['economy', 'standard'];
 const RESOLUTION = '720p';
 const HOOK_SECONDS = 2.5;
 const POLL_MS = 20_000;
@@ -35,7 +37,15 @@ function captionItem(plan) {
   return { hookText: plan.hookText, caption: plan.caption, hashtags: plan.hashtags };
 }
 
+// Ekonomik moddaki fotoğraf sahneleri için yüklenen fotoğrafların yerel kopyası
+const photoName = (id, i) => `${id}-photo-${i + 1}.jpg`;
+
+async function removePhotos(id) {
+  for (const i of [0, 1]) await fs.promises.unlink(filePath(photoName(id, i))).catch(() => {});
+}
+
 async function failVideo(id, message) {
+  await removePhotos(id);
   await ProductVideo.update(id, { status: 'fail', error: String(message).slice(0, 500), completedAt: new Date() });
   await telegram.sendMessage(`❌ Ürün videosu üretilemedi (#${id}): ${telegram.escapeHtml(String(message).slice(0, 300))}`)
     .catch(() => {});
@@ -52,10 +62,11 @@ async function download(url, target) {
   });
 }
 
-// 1. adım: fotoğrafları yükle, senaryoyu yaz, 3 sahneyi kie.ai'de başlat
-async function prepare(id, { productName, notes, photos }) {
+// 1. adım: fotoğrafları yükle, senaryoyu yaz, AI sahneleri kie.ai'de başlat
+async function prepare(id, { productName, notes, photos, quality }) {
   const urls = [];
   for (const [i, photo] of photos.entries()) {
+    if (quality === 'economy') await fs.promises.writeFile(filePath(photoName(id, i)), photo.buffer);
     urls.push(await kie.uploadImage(photo.buffer, photo.mimetype, `product-${id}-${i + 1}.jpg`));
   }
   const plan = await gemini.generateProductPlan({ productName, notes, photos });
@@ -63,7 +74,13 @@ async function prepare(id, { productName, notes, photos }) {
 
   const scenes = [];
   try {
-    for (const scene of plan.scenes) {
+    for (const [i, scene] of plan.scenes.entries()) {
+      if (quality === 'economy' && i > 0) {
+        // 2. sahne ön fotoğrafa yakınlaşır, 3. sahne varsa arka fotoğraftan uzaklaşır
+        const photo = i === 2 && photos.length > 1 ? 1 : 0;
+        scenes.push({ kind: 'photo', state: 'success', file: photoName(id, photo), effect: i === 1 ? 'in' : 'out' });
+        continue;
+      }
       const taskId = await kie.createTask(MODEL, {
         image_urls: urls,
         prompt: scene.prompt,
@@ -72,7 +89,7 @@ async function prepare(id, { productName, notes, photos }) {
         aspect_ratio: '9:16',
         mode: 'normal',
       });
-      scenes.push({ taskId, state: 'pending' });
+      scenes.push({ kind: 'ai', taskId, state: 'pending' });
     }
   } finally {
     // Başlatılabilen sahneler kaydedilsin; kredileri sonra hesaba katılır
@@ -135,10 +152,15 @@ async function render(id) {
     const durations = [];
     for (const [i, scene] of video.scenes.entries()) {
       const file = filePath(scene.file);
-      const info = await ffmpeg.probe(file);
-      const outSeconds = Math.min(info.duration, SCENE_SECONDS);
       const target = path.join(work, `part-${i}.mp4`);
-      await renderService.normalizeSegment({ file, hasAudio: info.hasAudio, speed: 1, outSeconds }, target);
+      let outSeconds = SCENE_SECONDS;
+      if (scene.kind === 'photo') {
+        await renderService.photoSegment({ file, effect: scene.effect, outSeconds }, target);
+      } else {
+        const info = await ffmpeg.probe(file);
+        outSeconds = Math.min(info.duration, SCENE_SECONDS);
+        await renderService.normalizeSegment({ file, hasAudio: info.hasAudio, speed: 1, outSeconds }, target);
+      }
       parts.push(target);
       durations.push(outSeconds);
     }
@@ -165,8 +187,9 @@ async function render(id) {
       duration: total,
       completedAt: new Date(),
     });
-    // Sahne dosyaları artık gereksiz
+    // Sahne dosyaları ve fotoğraflar artık gereksiz
     for (const scene of video.scenes) await fs.promises.unlink(filePath(scene.file)).catch(() => {});
+    await removePhotos(id);
 
     const caption = buildCaption(`🎬 Ürün videosu hazır: ${video.product_name} (#${id}, ${total.toFixed(0)} sn)`, captionItem(video.plan));
     await telegram.sendVideo(filePath(fileName), caption)
@@ -242,7 +265,12 @@ function ensurePoller() {
   }, POLL_MS);
 }
 
-async function start({ productName, notes, photos, autoPublish }) {
+async function start({ productName, notes, photos, autoPublish, quality }) {
+  if (!QUALITIES.includes(quality)) {
+    const err = new Error(`Kalite şunlardan biri olmalı: ${QUALITIES.join(', ')}`);
+    err.status = 400;
+    throw err;
+  }
   const usage = await videoService.monthlyUsage();
   if (usage.used >= usage.limit) {
     const err = new Error(`Aylık kredi limiti doldu (${usage.used}/${usage.limit}). Ayarlar'dan limiti artırabilirsin.`);
@@ -251,7 +279,7 @@ async function start({ productName, notes, photos, autoPublish }) {
   }
   const id = await ProductVideo.create({ product_name: productName, notes: notes || null, auto_publish: autoPublish ? 1 : 0 });
   // Uzun sürer (yükleme + Gemini); istek beklemesin, panel durumu sorgular
-  prepare(id, { productName, notes, photos }).catch((err) => {
+  prepare(id, { productName, notes, photos, quality }).catch((err) => {
     console.error(`Ürün videosu #${id} hazırlık hatası:`, err.message);
     failVideo(id, short(err));
   });
@@ -263,6 +291,7 @@ async function remove(id) {
   if (!video) return false;
   if (video.file_path) await fs.promises.unlink(filePath(video.file_path)).catch(() => {});
   for (const scene of video.scenes || []) if (scene.file) await fs.promises.unlink(filePath(scene.file)).catch(() => {});
+  await removePhotos(id);
   return ProductVideo.remove(id);
 }
 

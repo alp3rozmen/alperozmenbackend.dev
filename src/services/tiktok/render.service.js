@@ -74,6 +74,27 @@ async function normalizeSegment({ file, hasAudio, speed, outSeconds }, target) {
   await ffmpeg.run(args);
 }
 
+// Fotoğraftan ücretsiz sahne (Ken Burns): fotoğraf kesilmeden ortalanır, arkası bulanık kopyasıyla dolar,
+// yavaşça yakınlaşır ('in') veya uzaklaşır ('out'). Birleştirme için sessiz ses izi eklenir.
+async function photoSegment({ file, effect, outSeconds }, target) {
+  const frames = Math.round(outSeconds * 30);
+  const zoom = effect === 'out'
+    ? `max(1.15-0.15*on/${frames - 1},1)`
+    : `min(1+0.15*on/${frames - 1},1.15)`;
+  const video = `[0:v]split[a][b];` +
+    `[a]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=30:3[bg];` +
+    `[b]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg];` +
+    // Titremeyi azaltmak için zoompan iki kat çözünürlükte çalışır
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2,scale=${WIDTH * 2}:${HEIGHT * 2},` +
+    `zoompan=z='${zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=30,format=yuv420p[v]`;
+  await ffmpeg.run([
+    '-i', file, '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+    '-filter_complex', video, '-map', '[v]', '-map', '1:a', '-t', outSeconds.toFixed(3),
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+    '-c:a', 'aac', '-b:a', '128k', target,
+  ]);
+}
+
 // Fontta emoji yok (kutu çıkar); ASS'in özel karakterleri de temizlenir
 function assEscape(text) {
   return String(text)
@@ -279,4 +300,4 @@ async function resume() {
   }
 }
 
-module.exports = { CLIPS_DIR, FONTS_DIR, exclusive, normalizeSegment, buildAss, start, addClip, removeClip, removeRender, renderPath, resume, cleanup };
+module.exports = { CLIPS_DIR, FONTS_DIR, exclusive, normalizeSegment, photoSegment, buildAss, start, addClip, removeClip, removeRender, renderPath, resume, cleanup };
