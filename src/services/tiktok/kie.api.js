@@ -3,7 +3,6 @@ const Setting = require('../../models/Setting');
 
 const BASE_URL = 'https://api.kie.ai/api/v1';
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-base64-upload';
-const STREAM_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
 
 async function apiKey() {
   const key = await Setting.get('kie_api_key');
@@ -26,47 +25,4 @@ async function uploadImage(buffer, mimetype, fileName) {
   return data.data.downloadUrl;
 }
 
-// Büyük dosyalar (video) için; base64'ün %33 şişmesi olmadan diskten yükler
-async function uploadFile(filePath, mimetype, fileName) {
-  const form = new FormData();
-  form.append('file', await require('fs').openAsBlob(filePath, { type: mimetype }), fileName);
-  form.append('uploadPath', 'product-videos');
-  form.append('fileName', fileName);
-  const { data } = await axios.post(STREAM_UPLOAD_URL, form, {
-    headers: { Authorization: `Bearer ${await apiKey()}` }, timeout: 300_000, maxBodyLength: Infinity,
-  });
-  if (!data.success || !data.data?.downloadUrl) throw new Error(`kie.ai dosya yükleme: ${data.msg || 'bilinmeyen hata'}`);
-  return data.data.downloadUrl;
-}
-
-// kie HTTP 200 dönse bile gövdedeki `code` hata olabilir
-function unwrap(data) {
-  if (data.code !== 200) throw new Error(`kie.ai: ${data.msg || 'bilinmeyen hata'} (${data.code})`);
-  return data.data;
-}
-
-async function createTask(model, input) {
-  const { data } = await (await api()).post('/jobs/createTask', { model, input });
-  return unwrap(data).taskId;
-}
-
-async function getTask(taskId) {
-  const { data } = await (await api()).get('/jobs/recordInfo', { params: { taskId } });
-  const task = unwrap(data);
-  let urls = [];
-  if (task.resultJson) {
-    try {
-      urls = JSON.parse(task.resultJson).resultUrls || [];
-    } catch {
-      urls = [];
-    }
-  }
-  return {
-    state: task.state,
-    urls,
-    credits: task.creditsConsumed ?? null,
-    failMsg: task.failMsg || task.failCode || null,
-  };
-}
-
-module.exports = { createTask, getTask, uploadImage, uploadFile };
+module.exports = { createTask, getTask, uploadImage };

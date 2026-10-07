@@ -194,11 +194,8 @@ async function publish(id) {
 
   await ProductVideo.update(id, { publish_status: 'pending', publish_error: null });
   try {
-    // Site bot korumasının arkasında (Instagram'ın indiricisi doğrulama sayfasına takılır);
-    // video bu yüzden kie.ai'nin herkese açık deposuna yüklenip oradan verilir (24 saat tutulur)
-    const videoUrl = await kie.uploadFile(filePath(video.file_path), 'video/mp4', `product-video-${id}.mp4`);
     const caption = `${video.plan.caption}\n\n${video.plan.hashtags.join(' ')}`;
-    const mediaId = await instagram.publishReel({ videoUrl, caption });
+    const mediaId = await instagram.publishReel({ filePath: filePath(video.file_path), caption });
     await ProductVideo.update(id, { publish_status: 'published', ig_media_id: mediaId });
     await telegram.sendMessage(`📸 Instagram'da paylaşıldı: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
   } catch (err) {
