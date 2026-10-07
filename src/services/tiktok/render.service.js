@@ -23,6 +23,14 @@ const MAX_HOOK_SECONDS = 15;
 
 const queue = [];
 let working = false;
+let cpuChain = Promise.resolve();
+
+// ffmpeg işleri (bu kuyruk ve otomatik ürün videoları) sırayla çalışır; paylaşımlı hostingi kilitlemesin
+function exclusive(fn) {
+  const run = cpuChain.then(fn, fn);
+  cpuChain = run.catch(() => {});
+  return run;
+}
 
 fs.mkdirSync(CLIPS_DIR, { recursive: true });
 fs.mkdirSync(RENDERS_DIR, { recursive: true });
@@ -196,7 +204,10 @@ async function drain() {
   if (working) return;
   working = true;
   try {
-    while (queue.length) await processRender(queue.shift());
+    while (queue.length) {
+      const id = queue.shift();
+      await exclusive(() => processRender(id));
+    }
     await cleanup().catch((err) => console.error('TikTok dosya temizliği hatası:', err.message));
   } finally {
     working = false;
@@ -268,4 +279,4 @@ async function resume() {
   }
 }
 
-module.exports = { CLIPS_DIR, start, addClip, removeClip, removeRender, renderPath, resume, cleanup };
+module.exports = { CLIPS_DIR, FONTS_DIR, exclusive, normalizeSegment, buildAss, start, addClip, removeClip, removeRender, renderPath, resume, cleanup };

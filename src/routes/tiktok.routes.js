@@ -47,4 +47,13 @@ router.get('/renders/:id', auth, tiktokController.getRender);
 router.get('/renders/:id/file', auth, tiktokController.renderFile);
 router.delete('/renders/:id', auth, tiktokController.removeRender);
 
+// Fotoğraftan otomatik ürün videosu: ön yüz zorunlu, arka yüz opsiyonel
+router.post('/product-videos', auth, upload.fields([{ name: 'photos', maxCount: 2 }]), tiktokController.createProductVideo);
+router.get('/product-videos', auth, tiktokController.listProductVideos);
+router.get('/product-videos/:id', auth, tiktokController.getProductVideo);
+router.get('/product-videos/:id/file', auth, tiktokController.productVideoFile);
+router.post('/product-videos/:id/publish', auth, tiktokController.publishProductVideo);
+router.delete('/product-videos/:id', auth, tiktokController.removeProductVideo);
+router.get('/public/:file', tiktokController.publicProductVideo);
+
 module.exports = router;

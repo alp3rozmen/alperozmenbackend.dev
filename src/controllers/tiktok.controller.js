@@ -6,6 +6,8 @@ const TiktokVideo = require('../models/TiktokVideo');
 const TiktokClip = require('../models/TiktokClip');
 const TiktokRender = require('../models/TiktokRender');
 const renderService = require('../services/tiktok/render.service');
+const autoVideo = require('../services/tiktok/autovideo.service');
+const ProductVideo = require('../models/ProductVideo');
 
 const DURATIONS = [6, 8, 10, 15];
 const RESOLUTIONS = ['480p', '720p'];
@@ -250,5 +252,102 @@ exports.removeRender = async (req, res) => {
     res.json({ message: 'Video silindi.' });
   } catch (err) {
     fail(res, err, 'Video silinemedi');
+  }
+};
+
+// --- Fotoğraftan otomatik ürün videosu ---
+
+// Panelde gereksiz büyük alanlar (fotoğraf URL'leri, görev id'leri) gönderilmez
+function productVideoView(v) {
+  const { photos, public_token, ...rest } = v;
+  return {
+    ...rest,
+    scenes: (v.scenes || []).map((s) => ({ state: s.state, error: s.error || null })),
+  };
+}
+
+exports.createProductVideo = async (req, res) => {
+  const productName = String(req.body.productName || '').trim().slice(0, 200);
+  if (!productName) return res.status(400).json({ message: 'Ürün adı gerekli.' });
+  const photos = (req.files?.photos || []).filter((f) => f.mimetype.startsWith('image/')).slice(0, 2);
+  if (!photos.length) return res.status(400).json({ message: 'En az bir ürün fotoğrafı gerekli (ön yüz).' });
+
+  try {
+    const video = await autoVideo.start({
+      productName,
+      notes: String(req.body.notes || '').slice(0, 2000),
+      photos,
+      autoPublish: req.body.autoPublish === 'true',
+    });
+    res.status(201).json(productVideoView(video));
+  } catch (err) {
+    fail(res, err, 'Video başlatılamadı');
+  }
+};
+
+exports.listProductVideos = async (req, res) => {
+  try {
+    res.json((await ProductVideo.list()).map(productVideoView));
+  } catch (err) {
+    fail(res, err, 'Videolar alınamadı');
+  }
+};
+
+exports.getProductVideo = async (req, res) => {
+  try {
+    const video = await ProductVideo.findById(Number(req.params.id));
+    if (!video) return res.status(404).json({ message: 'Video bulunamadı.' });
+    res.json(productVideoView(video));
+  } catch (err) {
+    fail(res, err, 'Video alınamadı');
+  }
+};
+
+exports.productVideoFile = async (req, res) => {
+  try {
+    const video = await ProductVideo.findById(Number(req.params.id));
+    if (!video?.file_path) return res.status(404).json({ message: 'Dosya yok (henüz hazır değil veya 14 günü geçtiği için silindi).' });
+    res.sendFile(autoVideo.filePath(video.file_path), { headers: { 'Content-Type': 'video/mp4' } });
+  } catch (err) {
+    fail(res, err, 'Dosya alınamadı');
+  }
+};
+
+// Instagram videoyu buradan indirir; giriş gerektirmez, tahmin edilemeyen token ile korunur
+exports.publicProductVideo = async (req, res) => {
+  const token = String(req.params.file || '').replace(/\.mp4$/, '');
+  if (!/^[0-9a-f]{32}$/.test(token)) return res.status(404).end();
+  try {
+    const video = await ProductVideo.findByToken(token);
+    if (!video?.file_path) return res.status(404).end();
+    res.sendFile(autoVideo.filePath(video.file_path), { headers: { 'Content-Type': 'video/mp4' } });
+  } catch (err) {
+    res.status(500).end();
+  }
+};
+
+exports.publishProductVideo = async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const video = await ProductVideo.findById(id);
+    if (!video) return res.status(404).json({ message: 'Video bulunamadı.' });
+    if (video.status !== 'success' || !video.file_path) return res.status(400).json({ message: 'Video henüz hazır değil.' });
+    if (video.publish_status === 'pending') return res.status(409).json({ message: 'Paylaşım zaten sürüyor.' });
+    if (video.publish_status === 'published') return res.status(409).json({ message: 'Bu video zaten paylaşıldı.' });
+    // Instagram işlemesi dakikalar sürer; sonuç panelde ve Telegram'da görünür
+    autoVideo.publish(id).catch(() => {});
+    res.status(202).json({ message: 'Instagram paylaşımı başladı; bitince Telegram\'a bildirim gelir.' });
+  } catch (err) {
+    fail(res, err, 'Paylaşım başlatılamadı');
+  }
+};
+
+exports.removeProductVideo = async (req, res) => {
+  try {
+    const removed = await autoVideo.remove(Number(req.params.id));
+    if (!removed) return res.status(404).json({ message: 'Video bulunamadı.' });
+    res.json({ message: 'Video silindi.' });
+  } catch (err) {
+    fail(res, err, 'Silinemedi');
   }
 };

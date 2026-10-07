@@ -107,4 +107,71 @@ async function generateIdeas({ productName, notes, photos, count }) {
   return { research: researchText, ideas: JSON.parse(response.text).ideas };
 }
 
-module.exports = { generateIdeas };
+const PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    hookText: { type: 'string', description: 'İlk 2-3 saniyedeki ekran yazısı, Türkçe, en fazla 6 kelime, merak uyandıran' },
+    scenes: {
+      type: 'array',
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Sahnenin kısa Türkçe adı' },
+          prompt: { type: 'string', description: 'İngilizce image-to-video prompt' },
+          text: { type: 'string', description: 'Bu sahnede ekranda çıkacak Türkçe yazı, en fazla 6 kelime' },
+        },
+        required: ['title', 'prompt', 'text'],
+      },
+    },
+    caption: { type: 'string', description: 'TikTok/Instagram açıklaması, Türkçe, 1-3 cümle, satın almaya yönlendiren çağrı içerir' },
+    hashtags: { type: 'array', items: { type: 'string' }, description: '5-8 hashtag, # ile' },
+  },
+  required: ['hookText', 'scenes', 'caption', 'hashtags'],
+};
+
+// Fotoğraftan otomatik ürün videosu için 3 sahnelik senaryo. Prompt'lar Grok image-to-video'ya gider;
+// @image1 ön fotoğraf, varsa @image2 arka fotoğraftır.
+async function generateProductPlan({ productName, notes, photos }) {
+  const ai = await client();
+  const model = await Setting.get('gemini_text_model');
+  const brand = await Setting.get('brand_name');
+  const hasBack = photos.length > 1;
+  const refs = hasBack
+    ? '@image1 is the FRONT of the product, @image2 is the BACK. When the back side is visible, it must match @image2.'
+    : '@image1 is the product. Only one photo exists: keep unseen sides simple and consistent with the visible design.';
+
+  const response = await generate(ai, {
+    model,
+    contents: [
+      ...photos.map(imagePart),
+      {
+        text: `Ürün: ${productName}${notes ? `\nNot: ${notes}` : ''}\nMarka: ${brand} (3D yazıcıyla basılmış ürün)\n\n` +
+          'Bu fotoğraflardan, satışa yönelik 18 saniyelik dikey (9:16) bir ürün tanıtım videosu için 3 sahne yaz. ' +
+          'Her sahne 6 saniyelik ayrı bir AI videosu olarak üretilecek.\n' +
+          'Sahne sırası:\n' +
+          '1. Hero: temiz stüdyo zemininde ürün yavaşça döner (turntable) veya kamera etrafında yörüngede döner, tüm yüzlerini gösterir.\n' +
+          '2. Detay: makro yakın çekim, yavaş kamera kayması; katman dokusu, kenarlar, renk.\n' +
+          '3. Kullanım: ürün gerçek kullanım ortamında (fotoğrafa ve ürüne uygun: masa, oyun düzeni, raf vb.), doğal ışık.\n' +
+          `prompt kuralları (İngilizce): her prompt "@image1 " ile başlasın. ${refs} ` +
+          'The product must stay exactly like the photos: same shape, proportions, colors and details; do not add or change parts. ' +
+          'No text, letters, logos or watermarks in the video. No people faces; hands only if natural. ' +
+          'Describe camera movement, lighting and background clearly. Audio: soft ambient sound only, no speech, no voiceover, no singing.\n' +
+          'Ekran yazıları ve açıklama Türkçe olsun; açıklamada satın almak için DM\'den yazmaya çağır.',
+      },
+    ],
+    config: { responseMimeType: 'application/json', responseJsonSchema: PLAN_SCHEMA },
+  });
+
+  const plan = JSON.parse(response.text);
+  if (!Array.isArray(plan.scenes) || plan.scenes.length < 3) throw new Error('Gemini 3 sahne üretmedi, tekrar dene.');
+  plan.scenes = plan.scenes.slice(0, 3).map((scene) => ({
+    ...scene,
+    // Model bazen referansı unutuyor; ürünün fotoğraftan alınması için şart
+    prompt: scene.prompt.trim().startsWith('@image1') ? scene.prompt.trim() : `@image1 ${scene.prompt.trim()}`,
+  }));
+  return plan;
+}
+
+module.exports = { generateIdeas, generateProductPlan };

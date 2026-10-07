@@ -118,3 +118,28 @@ CREATE TABLE IF NOT EXISTS tiktok_renders (
   INDEX idx_idea (idea_id, idea_index),
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Fotoğraftan tam otomatik ürün videosu: Gemini senaryo yazar, kie.ai (Grok) sahneleri üretir, ffmpeg birleştirir.
+-- Dosyalar storage/tiktok/product altında, 14 gün sonra silinir.
+CREATE TABLE IF NOT EXISTS product_videos (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  product_name VARCHAR(200) NOT NULL,
+  notes TEXT NULL,
+  status ENUM('planning','generating','rendering','success','fail') NOT NULL DEFAULT 'planning',
+  photos TEXT NULL,
+  plan MEDIUMTEXT NULL,
+  scenes TEXT NULL,
+  credits DECIMAL(10,2) NULL,
+  file_path VARCHAR(255) NULL,
+  duration DECIMAL(8,2) NULL,
+  public_token CHAR(32) NULL,
+  auto_publish TINYINT(1) NOT NULL DEFAULT 0,
+  publish_status ENUM('none','pending','published','fail') NOT NULL DEFAULT 'none',
+  publish_error VARCHAR(500) NULL,
+  ig_media_id VARCHAR(64) NULL,
+  error VARCHAR(500) NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completedAt DATETIME NULL,
+  INDEX idx_status (status),
+  UNIQUE KEY uq_public_token (public_token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
