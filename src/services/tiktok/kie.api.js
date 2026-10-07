@@ -3,6 +3,7 @@ const Setting = require('../../models/Setting');
 
 const BASE_URL = 'https://api.kie.ai/api/v1';
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-base64-upload';
+const STREAM_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
 
 async function apiKey() {
   const key = await Setting.get('kie_api_key');
@@ -22,6 +23,19 @@ async function uploadImage(buffer, mimetype, fileName) {
     fileName,
   }, { headers: { Authorization: `Bearer ${await apiKey()}` }, timeout: 60_000, maxBodyLength: Infinity });
   if (!data.success || !data.data?.downloadUrl) throw new Error(`kie.ai görsel yükleme: ${data.msg || 'bilinmeyen hata'}`);
+  return data.data.downloadUrl;
+}
+
+// Büyük dosyalar (video) için; base64'ün %33 şişmesi olmadan diskten yükler
+async function uploadFile(filePath, mimetype, fileName) {
+  const form = new FormData();
+  form.append('file', await require('fs').openAsBlob(filePath, { type: mimetype }), fileName);
+  form.append('uploadPath', 'product-videos');
+  form.append('fileName', fileName);
+  const { data } = await axios.post(STREAM_UPLOAD_URL, form, {
+    headers: { Authorization: `Bearer ${await apiKey()}` }, timeout: 300_000, maxBodyLength: Infinity,
+  });
+  if (!data.success || !data.data?.downloadUrl) throw new Error(`kie.ai dosya yükleme: ${data.msg || 'bilinmeyen hata'}`);
   return data.data.downloadUrl;
 }
 
@@ -55,4 +69,4 @@ async function getTask(taskId) {
   };
 }
 
-module.exports = { createTask, getTask, uploadImage };
+module.exports = { createTask, getTask, uploadImage, uploadFile };

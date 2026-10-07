@@ -1,7 +1,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
 const kie = require('./kie.api');
 const gemini = require('./gemini');
@@ -11,7 +10,6 @@ const instagram = require('../instagram.graph');
 const renderService = require('./render.service');
 const videoService = require('./video.service');
 const { buildCaption } = require('./caption');
-const Setting = require('../../models/Setting');
 const ProductVideo = require('../../models/ProductVideo');
 
 // Fotoğraf → Gemini senaryosu → 3 Grok sahnesi → ffmpeg ile birleştirme + Türkçe yazılar → Telegram (+ Instagram)
@@ -35,10 +33,6 @@ const short = (err) => String(err?.message || err).slice(0, 500);
 // Telegram ve Instagram açıklamasında aynı içerik kullanılır
 function captionItem(plan) {
   return { hookText: plan.hookText, caption: plan.caption, hashtags: plan.hashtags };
-}
-
-function publicUrl(base, video) {
-  return `${base.replace(/\/+$/, '')}/api/tiktok/public/${video.public_token}.mp4`;
 }
 
 async function failVideo(id, message) {
@@ -168,7 +162,6 @@ async function render(id) {
       status: 'success',
       file_path: fileName,
       duration: total,
-      public_token: crypto.randomBytes(16).toString('hex'),
       completedAt: new Date(),
     });
     // Sahne dosyaları artık gereksiz
@@ -201,9 +194,11 @@ async function publish(id) {
 
   await ProductVideo.update(id, { publish_status: 'pending', publish_error: null });
   try {
-    const base = await Setting.get('public_base_url');
+    // Site bot korumasının arkasında (Instagram'ın indiricisi doğrulama sayfasına takılır);
+    // video bu yüzden kie.ai'nin herkese açık deposuna yüklenip oradan verilir (24 saat tutulur)
+    const videoUrl = await kie.uploadFile(filePath(video.file_path), 'video/mp4', `product-video-${id}.mp4`);
     const caption = `${video.plan.caption}\n\n${video.plan.hashtags.join(' ')}`;
-    const mediaId = await instagram.publishReel({ videoUrl: publicUrl(base, video), caption });
+    const mediaId = await instagram.publishReel({ videoUrl, caption });
     await ProductVideo.update(id, { publish_status: 'published', ig_media_id: mediaId });
     await telegram.sendMessage(`📸 Instagram'da paylaşıldı: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
   } catch (err) {
@@ -265,7 +260,7 @@ async function remove(id) {
 async function cleanup() {
   for (const row of await ProductVideo.findExpiredFiles(new Date(Date.now() - KEEP_FILES_MS))) {
     await fs.promises.unlink(filePath(row.file_path)).catch(() => {});
-    await ProductVideo.update(row.id, { file_path: null, public_token: null });
+    await ProductVideo.update(row.id, { file_path: null });
   }
 }
 

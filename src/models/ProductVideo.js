@@ -25,11 +25,6 @@ async function findById(id) {
   return parse(rows[0]);
 }
 
-async function findByToken(token) {
-  const [rows] = await db.query('SELECT * FROM product_videos WHERE public_token = ?', [token]);
-  return parse(rows[0]);
-}
-
 async function list(limit = 20) {
   const [rows] = await db.query('SELECT * FROM product_videos ORDER BY id DESC LIMIT ?', [limit]);
   return rows.map(parse);
@@ -62,4 +57,4 @@ async function findExpiredFiles(before) {
   return rows;
 }
 
-module.exports = { create, findById, findByToken, list, findByStatus, update, remove, creditsSince, findExpiredFiles };
+module.exports = { create, findById, list, findByStatus, update, remove, creditsSince, findExpiredFiles };

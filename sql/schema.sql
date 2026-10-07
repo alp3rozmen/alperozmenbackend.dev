@@ -132,7 +132,6 @@ CREATE TABLE IF NOT EXISTS product_videos (
   credits DECIMAL(10,2) NULL,
   file_path VARCHAR(255) NULL,
   duration DECIMAL(8,2) NULL,
-  public_token CHAR(32) NULL,
   auto_publish TINYINT(1) NOT NULL DEFAULT 0,
   publish_status ENUM('none','pending','published','fail') NOT NULL DEFAULT 'none',
   publish_error VARCHAR(500) NULL,
@@ -140,6 +139,5 @@ CREATE TABLE IF NOT EXISTS product_videos (
   error VARCHAR(500) NULL,
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completedAt DATETIME NULL,
-  INDEX idx_status (status),
-  UNIQUE KEY uq_public_token (public_token)
+  INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -54,6 +54,5 @@ router.get('/product-videos/:id', auth, tiktokController.getProductVideo);
 router.get('/product-videos/:id/file', auth, tiktokController.productVideoFile);
 router.post('/product-videos/:id/publish', auth, tiktokController.publishProductVideo);
 router.delete('/product-videos/:id', auth, tiktokController.removeProductVideo);
-router.get('/public/:file', tiktokController.publicProductVideo);
 
 module.exports = router;

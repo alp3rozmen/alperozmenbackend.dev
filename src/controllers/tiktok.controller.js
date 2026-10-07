@@ -259,7 +259,7 @@ exports.removeRender = async (req, res) => {
 
 // Panelde gereksiz büyük alanlar (fotoğraf URL'leri, görev id'leri) gönderilmez
 function productVideoView(v) {
-  const { photos, public_token, ...rest } = v;
+  const { photos, ...rest } = v;
   return {
     ...rest,
     scenes: (v.scenes || []).map((s) => ({ state: s.state, error: s.error || null })),
@@ -310,19 +310,6 @@ exports.productVideoFile = async (req, res) => {
     res.sendFile(autoVideo.filePath(video.file_path), { headers: { 'Content-Type': 'video/mp4' } });
   } catch (err) {
     fail(res, err, 'Dosya alınamadı');
-  }
-};
-
-// Instagram videoyu buradan indirir; giriş gerektirmez, tahmin edilemeyen token ile korunur
-exports.publicProductVideo = async (req, res) => {
-  const token = String(req.params.file || '').replace(/\.mp4$/, '');
-  if (!/^[0-9a-f]{32}$/.test(token)) return res.status(404).end();
-  try {
-    const video = await ProductVideo.findByToken(token);
-    if (!video?.file_path) return res.status(404).end();
-    res.sendFile(autoVideo.filePath(video.file_path), { headers: { 'Content-Type': 'video/mp4' } });
-  } catch (err) {
-    res.status(500).end();
   }
 };
 

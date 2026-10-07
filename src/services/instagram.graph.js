@@ -12,7 +12,7 @@ function graphError(err) {
   return new Error(err.response?.data?.error?.message || err.message);
 }
 
-// Instagram videoyu videoUrl'den kendisi indirir; adres herkese açık olmalı
+// Instagram videoyu videoUrl'den kendisi indirir; adres herkese açık olmalı (bot korumasız)
 async function publishReel({ videoUrl, caption }) {
   const userId = await Setting.get('ig_user_id');
   const token = await Setting.get('ig_access_token');
