@@ -25,4 +25,34 @@ async function uploadImage(buffer, mimetype, fileName) {
   return data.data.downloadUrl;
 }
 
+// kie HTTP 200 dönse bile gövdedeki `code` hata olabilir
+function unwrap(data) {
+  if (data.code !== 200) throw new Error(`kie.ai: ${data.msg || 'bilinmeyen hata'} (${data.code})`);
+  return data.data;
+}
+
+async function createTask(model, input) {
+  const { data } = await (await api()).post('/jobs/createTask', { model, input });
+  return unwrap(data).taskId;
+}
+
+async function getTask(taskId) {
+  const { data } = await (await api()).get('/jobs/recordInfo', { params: { taskId } });
+  const task = unwrap(data);
+  let urls = [];
+  if (task.resultJson) {
+    try {
+      urls = JSON.parse(task.resultJson).resultUrls || [];
+    } catch {
+      urls = [];
+    }
+  }
+  return {
+    state: task.state,
+    urls,
+    credits: task.creditsConsumed ?? null,
+    failMsg: task.failMsg || task.failCode || null,
+  };
+}
+
 module.exports = { createTask, getTask, uploadImage };
