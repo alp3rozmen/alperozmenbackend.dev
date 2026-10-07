@@ -1,4 +1,5 @@
 const gate = require('./gate.api');
+const binanceTr = require('./binancetr.api');
 const telegram = require('../telegram');
 const { evaluateBreakout, isMarketHealthy } = require('./strategy');
 const CryptoSignal = require('../../models/CryptoSignal');
@@ -7,13 +8,16 @@ const { db } = require('../../config/db');
 const DEFAULT_SETTINGS = {
   intervalMin: 5,          // tarama sıklığı (dakika)
   timeframe: '1h',         // sinyal mum aralığı
-  minVolume24h: 5_000_000, // min. 24s USDT hacmi (backtest: 1M→5M düşüşü yarıya indirdi, iki dönemde de kârlı)
+  // Ekim 2026 backtest'i (200 gün, 1h, komisyon dahil): 5M/2.5 → 1M/2.0 ile haftada ~9 → ~10 sinyal,
+  // işlem başı +%0.57 → +%0.94, en büyük düşüş -%62 → -%41. Hacim/oran/kırılım filtrelerini gevşetmek
+  // sinyali artırıyor ama getiriyi sıfıra yaklaştırıyor; kopma sınırını sıkmak her havuzda kaliteyi artırdı.
+  minVolume24h: 1_000_000, // min. 24s USDT hacmi
   maxChange24h: 30,        // 24s'te bundan fazla pompalanmışları kovalama
   breakoutLookback: 20,
   minVolumeRatio: 2,
   rsiMin: 55,
   rsiMax: 78,
-  maxExtensionAtr: 2.5,
+  maxExtensionAtr: 2,      // kırılım EMA20'den en fazla 2 ATR uzakta olmalı (geç kalınmış kırılımları ele)
   minAtrPct: 0.4,
   maxAtrPct: 6,
   slAtr: 2,                // stop = giriş - 2 ATR
@@ -21,6 +25,8 @@ const DEFAULT_SETTINGS = {
   maxHoldHours: 96,        // bu süre sonunda pozisyon piyasadan kapatılır
   cooldownHours: 24,       // aynı çifte tekrar sinyal için bekleme
   feePct: 0.2,             // alış + satış komisyonu toplamı
+  binanceTrOnly: false,    // sadece Binance TR'de işlem gören coinler (backtest: haftada ~7.6 sinyal, işlem başı +%0.5)
+  statusReports: false,    // her taramada Telegram'a sessiz durum raporu
 };
 
 const TIMEFRAME_MS = { '5m': 300_000, '15m': 900_000, '30m': 1_800_000, '1h': 3_600_000, '4h': 14_400_000 };
@@ -32,11 +38,21 @@ const TIMEFRAME_PRESETS = {
   '4h': { maxHoldHours: 384, cooldownHours: 96 },
 };
 
-// DB'de sadece kullanıcının seçtiği mum aralığı tutulur; geri kalan her şey koddaki varsayılanlardan gelir
+// DB'de sadece panelden seçilenler (mum aralığı ve iki seçenek) tutulur; geri kalan her şey koddaki varsayılanlardan gelir
 // (eski kayıtlar tüm ayarları içeriyordu, onlar da böylece yeni varsayılanları alır)
 function buildSettings(saved = {}) {
   const timeframe = TIMEFRAME_PRESETS[saved.timeframe] ? saved.timeframe : DEFAULT_SETTINGS.timeframe;
-  return { ...DEFAULT_SETTINGS, ...TIMEFRAME_PRESETS[timeframe], timeframe };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...TIMEFRAME_PRESETS[timeframe],
+    timeframe,
+    binanceTrOnly: !!saved.binanceTrOnly,
+    statusReports: !!saved.statusReports,
+  };
+}
+
+function savedPart(s) {
+  return { timeframe: s.timeframe, binanceTrOnly: s.binanceTrOnly, statusReports: s.statusReports };
 }
 const LEVERAGED = /\d+[LS]_USDT$/;
 const EXCLUDED = new Set(['USDC', 'FDUSD', 'TUSD', 'DAI', 'USDE', 'USDD', 'PYUSD', 'EUR', 'EURC', 'USD1', 'PAXG', 'XAUT', 'WBTC', 'STETH']);
@@ -54,7 +70,10 @@ function fmt(value) {
 }
 
 function pairLink(pair) {
-  return `https://www.gate.io/trade/${pair}`;
+  if (settings.binanceTrOnly) {
+    return `<a href="${binanceTr.tradeLink(pair.replace('_USDT', ''))}">Binance TR'de aç</a>`;
+  }
+  return `<a href="https://www.gate.io/trade/${pair}">Gate.io'da aç</a>`;
 }
 
 // Gate.io limitlerine takılmamak için sınırlı eşzamanlılıkla çalıştırır
@@ -75,10 +94,13 @@ async function mapLimit(items, limit, fn) {
   return results;
 }
 
-function pickCandidates(tickers, skipPairs) {
+// allowedBases: verilirse sadece bu coinler (Binance TR modu)
+function pickCandidates(tickers, skipPairs, allowedBases) {
   return tickers.filter((t) => {
     if (!t.currency_pair.endsWith('_USDT')) return false;
-    if (LEVERAGED.test(t.currency_pair) || EXCLUDED.has(t.currency_pair.replace('_USDT', ''))) return false;
+    const base = t.currency_pair.replace('_USDT', '');
+    if (LEVERAGED.test(t.currency_pair) || EXCLUDED.has(base)) return false;
+    if (allowedBases && !allowedBases.has(base)) return false;
     if (skipPairs.has(t.currency_pair)) return false;
     const change = Number(t.change_percentage);
     return Number(t.quote_volume) >= settings.minVolume24h && change < settings.maxChange24h;
@@ -104,15 +126,17 @@ async function closeSignal(signal, status, exitPrice, extra, closedAt) {
     `Giriş ${fmt(Number(signal.entry_price))} → Çıkış ${fmt(exitPrice)}\n` +
     `Sonuç: <b>${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%</b> (komisyon dahil) · ${hours} saat`
   ).catch((err) => console.error('Telegram hatası:', err.message));
+  return { pair: signal.pair, status, pnl };
 }
 
 // Açık sanal pozisyonları son kontrolden bu yana oluşan 5dk mumlarla günceller.
 // Aynı mumda hem stop hem hedef görüldüyse kötümser davranıp stop sayar.
 // Süre dolumu mum zamanına göre: sunucu günlerce kapalı kalsa bile pozisyon tam süresi dolduğu andaki fiyattan kapanır.
+// Dönüş: bu turda kapanan pozisyonlar
 async function updateOpenSignals() {
   const open = await CryptoSignal.findOpen();
 
-  await mapLimit(open, 4, async (signal) => {
+  const results = await mapLimit(open, 4, async (signal) => {
     const tp = Number(signal.tp_price);
     const sl = Number(signal.sl_price);
     const expiresAt = new Date(signal.opened_at).getTime() + settings.maxHoldHours * 3_600_000;
@@ -139,7 +163,9 @@ async function updateOpenSignals() {
       ...extra,
       checked_at: lastCandle ? new Date(lastCandle.time) : signal.checked_at,
     });
+    return null;
   });
+  return results.filter(Boolean);
 }
 
 async function findNewSignals(tickers) {
@@ -151,7 +177,8 @@ async function findNewSignals(tickers) {
 
   const cooldownStart = new Date(Date.now() - settings.cooldownHours * 3_600_000);
   const skipPairs = await CryptoSignal.recentPairs(cooldownStart);
-  const candidates = pickCandidates(tickers, skipPairs);
+  const allowedBases = settings.binanceTrOnly ? await binanceTr.fetchBaseAssets() : null;
+  const candidates = pickCandidates(tickers, skipPairs, allowedBases);
 
   const results = await mapLimit(candidates, 5, async (t) => {
     const candles = (await gate.fetchCandles(t.currency_pair, settings.timeframe, 120)).filter((c) => c.closed);
@@ -162,7 +189,7 @@ async function findNewSignals(tickers) {
     return hit ? { ticker: t, ...hit } : null;
   });
 
-  let count = 0;
+  const opened = [];
   for (const r of results) {
     if (!r) continue;
     const entry = Number(r.ticker.last);
@@ -185,20 +212,19 @@ async function findNewSignals(tickers) {
       opened_at: now,
       checked_at: now,
     });
-    count++;
-
     const coin = r.ticker.currency_pair.replace('_USDT', '');
+    opened.push(coin);
     await telegram.sendMessage(
       `🟢 <b>AL: ${coin}/USDT</b>\n` +
       `Giriş: ${fmt(entry)}\n` +
       `🎯 Hedef: ${fmt(tp)} (+${((tp / entry - 1) * 100).toFixed(2)}%)\n` +
       `🛑 Stop: ${fmt(sl)} (${((sl / entry - 1) * 100).toFixed(2)}%)\n` +
       `Hacim ${r.volumeRatio.toFixed(1)}x · RSI ${r.rsi.toFixed(0)} · 24s ${Number(r.ticker.change_percentage).toFixed(1)}%\n` +
-      `<a href="${pairLink(r.ticker.currency_pair)}">Gate.io'da aç</a>`
+      pairLink(r.ticker.currency_pair)
     ).catch((err) => console.error('Telegram hatası:', err.message));
   }
 
-  return { marketHealthy, candidates: candidates.length, signals: count };
+  return { marketHealthy, candidates: candidates.length, signals: opened.length, opened };
 }
 
 // Uygulama ve cron script'i aynı anda çalışmasın (aynı sinyal/kapanış iki kez yazılmasın)
@@ -221,21 +247,65 @@ async function withLock(fn) {
   }
 }
 
+function nextSignalWindow() {
+  const tf = TIMEFRAME_MS[settings.timeframe];
+  return new Date(Math.floor(Date.now() / tf) * tf + tf);
+}
+
+function clock(date) {
+  return date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' });
+}
+
+// "Botun aktifliğini bildir" açıksa her taramadan sonra sessiz bir özet gönderir
+async function sendStatusReport(result, closed, tickers) {
+  const prices = new Map(tickers.map((t) => [t.currency_pair, Number(t.last)]));
+  const open = await CryptoSignal.findOpen();
+  const pnls = open
+    .map((s) => prices.get(s.pair) && (prices.get(s.pair) / Number(s.entry_price) - 1) * 100 - settings.feePct)
+    .filter((v) => typeof v === 'number');
+
+  let scanLine;
+  if (result.waiting) scanLine = `⏳ Mum kapanışı bekleniyor, sonraki sinyal taraması ${clock(nextSignalWindow())}`;
+  else if (result.marketHealthy === false) scanLine = '⚠️ BTC zayıf, yeni sinyal aranmadı';
+  else if (result.signals) scanLine = `🟢 ${result.candidates} coin tarandı, ${result.signals} sinyal: ${result.opened.join(', ')}`;
+  else scanLine = `🔍 ${result.candidates} coin tarandı, kriterlere uyan yok`;
+
+  const lines = [
+    `🤖 <b>Bot aktif</b> · ${clock(new Date())}`,
+    `${settings.timeframe} mum · ${settings.binanceTrOnly ? 'Binance TR coinleri' : 'Tüm Gate.io coinleri'}`,
+    scanLine,
+    `📂 Açık pozisyon: ${open.length}` +
+      (pnls.length ? ` (ort. ${(pnls.reduce((a, b) => a + b, 0) / pnls.length).toFixed(2)}%)` : ''),
+  ];
+  if (closed.length) {
+    lines.push(`📕 Bu turda kapanan: ${closed.map((c) => `${c.pair.replace('_USDT', '')} ${c.pnl > 0 ? '+' : ''}${c.pnl.toFixed(2)}%`).join(', ')}`);
+  }
+  lines.push(`⏱ ${(result.durationMs / 1000).toFixed(1)} sn`);
+
+  await telegram.sendMessage(lines.join('\n'), { silent: true })
+    .catch((err) => console.error('Telegram hatası:', err.message));
+}
+
 // Tek tarama turu. Hem iç zamanlayıcı hem de dışarıdan (cron) çağrılabilir.
 function tick() {
   return withLock(async () => {
     const started = Date.now();
     try {
       const tickers = await gate.fetchTickers();
-      await updateOpenSignals();
+      const closed = await updateOpenSignals();
       const result = await findNewSignals(tickers);
 
       lastScan = { at: new Date(), durationMs: Date.now() - started, ...result };
       await CryptoSignal.saveState({ last_scan_at: lastScan.at, last_error: null });
+      if (settings.statusReports) await sendStatusReport(lastScan, closed, tickers);
       return lastScan;
     } catch (err) {
       console.error('Kripto tarama hatası:', err.message);
       await CryptoSignal.saveState({ last_error: String(err.message).slice(0, 500) }).catch(() => {});
+      if (settings.statusReports) {
+        await telegram.sendMessage(`⚠️ <b>Tarama hatası</b> · ${clock(new Date())}\n${telegram.escapeHtml(err.message)}`, { silent: true })
+          .catch(() => {});
+      }
       throw err;
     }
   });
@@ -269,14 +339,26 @@ function schedule() {
   }, settings.intervalMin * 60_000);
 }
 
-async function start({ timeframe } = {}) {
-  settings = buildSettings({ timeframe });
-  await CryptoSignal.saveState({ running: 1, settings: { timeframe: settings.timeframe } });
+// Seçenekler (Binance TR, durum raporu) panelden ayrıca kaydedildiği için başlatırken korunur
+async function start({ timeframe, ...options } = {}) {
+  const state = await CryptoSignal.getState();
+  settings = buildSettings({ ...state?.settings, ...options, timeframe });
+  await CryptoSignal.saveState({ running: 1, settings: savedPart(settings) });
   schedule();
   tick().catch(() => {});
   await telegram.sendMessage(
-    `🤖 Kripto tarayıcı başladı. ${settings.intervalMin} dk'da bir, ${settings.timeframe} mumlarla taranıyor.`
+    `🤖 Kripto tarayıcı başladı. ${settings.intervalMin} dk'da bir, ${settings.timeframe} mumlarla ` +
+    `${settings.binanceTrOnly ? 'Binance TR coinleri' : 'tüm Gate.io coinleri'} taranıyor.` +
+    (settings.statusReports ? `\nDurum raporu açık: her taramada sessiz özet gelecek.` : '')
   ).catch((err) => console.error('Telegram hatası:', err.message));
+  return settings;
+}
+
+// Panelden checkbox değişince; bot çalışırken de anında geçerli olur
+async function setOptions(options) {
+  const state = await CryptoSignal.getState();
+  settings = buildSettings({ ...state?.settings, ...options });
+  await CryptoSignal.saveState({ settings: savedPart(settings) });
   return settings;
 }
 
@@ -334,7 +416,7 @@ async function status() {
   return {
     // Cron script'i ayrı süreçte çalışabildiği için durum DB'den okunur
     running: !!state?.running,
-    settings,
+    settings: buildSettings(state?.settings),
     timeframes: Object.keys(TIMEFRAME_PRESETS),
     lastScan,
     lastScanAt: state?.last_scan_at || null,
@@ -346,4 +428,4 @@ async function status() {
   };
 }
 
-module.exports = { start, stop, tick, tickIfRunning, status, listSignals, resumeIfRunning, DEFAULT_SETTINGS, TIMEFRAME_PRESETS };
+module.exports = { start, stop, setOptions, tick, tickIfRunning, status, listSignals, resumeIfRunning, DEFAULT_SETTINGS, TIMEFRAME_PRESETS };

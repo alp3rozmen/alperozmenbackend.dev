@@ -4,7 +4,8 @@ const path = require('path');
 const Setting = require('../models/Setting');
 
 // Telegraf'ı launch etmeden doğrudan Bot API'ye yazar; diğer botlarla polling çakışması olmaz.
-async function sendMessage(text) {
+// silent: bildirim sesi çıkarmaz (sık gelen durum raporları için)
+async function sendMessage(text, { silent = false } = {}) {
   const token = await Setting.get('crypto_tg_bot_token');
   const chatId = await Setting.get('crypto_tg_chat_id');
   if (!token || !chatId) {
@@ -16,6 +17,7 @@ async function sendMessage(text) {
     text,
     parse_mode: 'HTML',
     disable_web_page_preview: true,
+    disable_notification: silent,
   });
   return true;
 }

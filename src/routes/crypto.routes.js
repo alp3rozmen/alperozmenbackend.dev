@@ -18,6 +18,7 @@ router.get('/status', auth, cryptoController.status);
 router.get('/signals', auth, cryptoController.signals);
 router.post('/start', auth, cryptoController.start);
 router.post('/stop', auth, cryptoController.stop);
+router.post('/options', auth, cryptoController.options);
 router.post('/tick', cronOrAuth, cryptoController.tick);
 router.post('/telegram/test', auth, cryptoController.telegramTest);
 router.get('/telegram/chats', auth, cryptoController.telegramChats);

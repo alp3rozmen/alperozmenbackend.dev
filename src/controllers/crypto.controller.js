@@ -1,17 +1,43 @@
 const scanner = require('../services/crypto/scanner.service');
 const telegram = require('../services/telegram');
 
-// Panelden sadece mum aralığı seçilir; diğer ayarlar backtest edilmiş varsayılanlardan gelir
+const OPTION_KEYS = ['binanceTrOnly', 'statusReports'];
+
+// Panel checkbox'ları; gönderilmeyen seçenek değişmez
+function pickOptions(body = {}) {
+  const values = {};
+  for (const key of OPTION_KEYS) {
+    if (body[key] === undefined) continue;
+    if (typeof body[key] !== 'boolean') return { error: `${key} true/false olmalı` };
+    values[key] = body[key];
+  }
+  return { values };
+}
+
+// Panelden sadece mum aralığı ve iki seçenek seçilir; diğer ayarlar backtest edilmiş varsayılanlardan gelir
 exports.start = async (req, res) => {
   const timeframe = req.body?.timeframe;
   if (timeframe !== undefined && !scanner.TIMEFRAME_PRESETS[timeframe]) {
     return res.status(400).json({ message: `Mum aralığı şunlardan biri olmalı: ${Object.keys(scanner.TIMEFRAME_PRESETS).join(', ')}` });
   }
+  const options = pickOptions(req.body);
+  if (options.error) return res.status(400).json({ message: options.error });
   try {
-    const settings = await scanner.start({ timeframe });
+    const settings = await scanner.start({ timeframe, ...options.values });
     res.json({ message: 'Kripto tarayıcı başlatıldı', settings });
   } catch (err) {
     res.status(500).json({ message: 'Başlatılamadı', error: err.message });
+  }
+};
+
+exports.options = async (req, res) => {
+  const options = pickOptions(req.body);
+  if (options.error) return res.status(400).json({ message: options.error });
+  try {
+    const settings = await scanner.setOptions(options.values);
+    res.json({ message: 'Ayar kaydedildi', settings });
+  } catch (err) {
+    res.status(500).json({ message: 'Ayar kaydedilemedi', error: err.message });
   }
 };
 
