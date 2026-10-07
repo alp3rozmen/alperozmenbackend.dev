@@ -153,7 +153,8 @@ async function render(id) {
       '-f', 'concat', '-safe', '0', '-i', listFile,
       '-vf', `ass=${assFile}:fontsdir=${renderService.FONTS_DIR}`,
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p',
-      '-c:a', 'copy', '-movflags', '+faststart',
+      // Instagram API edit list içeren MP4'leri "ERROR" ile reddediyor; ffmpeg AAC gecikmesi için varsayılan olarak yazar
+      '-c:a', 'copy', '-movflags', '+faststart', '-use_editlist', '0',
       filePath(fileName),
     ]);
 
@@ -194,8 +195,19 @@ async function publish(id) {
 
   await ProductVideo.update(id, { publish_status: 'pending', publish_error: null });
   try {
+    // Site bot korumasının arkasında (Instagram'ın indiricisi doğrulama sayfasına takılır);
+    // video bu yüzden kie.ai'nin herkese açık deposuna yüklenip oradan verilir (24 saat tutulur)
+    // Eski render'larda edit list kalmış olabilir; yeniden kodlamadan temiz bir kopya çıkar
+    const clean = path.join(os.tmpdir(), `product-video-${id}-ig.mp4`);
+    let videoUrl;
+    try {
+      await ffmpeg.run(['-i', filePath(video.file_path), '-c', 'copy', '-movflags', '+faststart', '-use_editlist', '0', clean]);
+      videoUrl = await kie.uploadFile(clean, 'video/mp4', `product-video-${id}.mp4`);
+    } finally {
+      await fs.promises.unlink(clean).catch(() => {});
+    }
     const caption = `${video.plan.caption}\n\n${video.plan.hashtags.join(' ')}`;
-    const mediaId = await instagram.publishReel({ filePath: filePath(video.file_path), caption });
+    const mediaId = await instagram.publishReel({ videoUrl, caption });
     await ProductVideo.update(id, { publish_status: 'published', ig_media_id: mediaId });
     await telegram.sendMessage(`📸 Instagram'da paylaşıldı: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
   } catch (err) {
