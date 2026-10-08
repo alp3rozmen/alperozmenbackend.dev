@@ -12,9 +12,6 @@ const DEFINITIONS = {
   kie_video_model: { env: [], secret: false, default: 'grok-imagine/text-to-video' },
   kie_monthly_credit_limit: { env: [], secret: false, default: '1000' },
   brand_name: { env: [], secret: false, default: 'ALREY 3D' },
-  // Instagram resmi API (Instagram Login ile Creator/Business hesap); otomatik Reels paylaşımı için
-  ig_user_id: { env: ['IG_USER_ID'], secret: false },
-  ig_access_token: { env: ['IG_ACCESS_TOKEN'], secret: true },
 };
 
 // Telegram her mesajda ayar okuduğu için kısa süreli önbellek

@@ -8,7 +8,6 @@ const instagram = require('../instagram.graph');
 // Diskteki videoyu Instagram Reels olarak paylaşır; medya id'sini döner.
 // Site bot korumasının arkasında (Instagram'ın indiricisi doğrulama sayfasına takılır); video bu yüzden
 // kie.ai'nin herkese açık deposuna yüklenip oradan verilir (24 saat tutulur).
-// account verilmezse Ayarlar'daki eski tek hesap kullanılır.
 async function publishFile({ file, caption, account, name }) {
   // Edit list kalmış render'larda Instagram işleme hatası veriyordu; yeniden kodlamadan temiz kopya çıkar
   const clean = path.join(os.tmpdir(), `${name}-ig-${Date.now()}.mp4`);

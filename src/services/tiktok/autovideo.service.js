@@ -219,16 +219,15 @@ async function publish(id) {
 
   await ProductVideo.update(id, { publish_status: 'pending', publish_error: null });
   try {
-    // Hesap seçilmediyse Ayarlar'daki eski tek hesap kullanılır
-    const account = video.ig_account_id ? await IgAccount.findById(video.ig_account_id) : null;
-    if (video.ig_account_id && !account) throw new Error('Seçilen Instagram hesabı silinmiş.');
+    if (!video.ig_account_id) throw new Error('Bu video için Instagram hesabı seçilmemiş.');
+    const account = await IgAccount.findById(video.ig_account_id);
+    if (!account) throw new Error('Seçilen Instagram hesabı silinmiş.');
     const caption = `${video.plan.caption}\n\n${video.plan.hashtags.join(' ')}`;
     const mediaId = await igpublish.publishFile({
       file: filePath(video.file_path), caption, account, name: `product-video-${id}`,
     });
     await ProductVideo.update(id, { publish_status: 'published', ig_media_id: mediaId });
-    const where = account ? ` (@${account.username})` : '';
-    await telegram.sendMessage(`📸 Instagram'da paylaşıldı${telegram.escapeHtml(where)}: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
+    await telegram.sendMessage(`📸 Instagram'da paylaşıldı (@${telegram.escapeHtml(account.username)}): ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
   } catch (err) {
     await ProductVideo.update(id, { publish_status: 'fail', publish_error: short(err) });
     await telegram.sendMessage(`⚠️ Instagram paylaşımı başarısız (#${id}): ${telegram.escapeHtml(short(err))}`).catch(() => {});
@@ -264,6 +263,19 @@ function ensurePoller() {
 async function start({ productName, notes, photos, autoPublish, quality, igAccountId }) {
   if (!QUALITIES.includes(quality)) {
     const err = new Error(`Kalite şunlardan biri olmalı: ${QUALITIES.join(', ')}`);
+    err.status = 400;
+    throw err;
+  }
+  // Paylaşım sonradan yapılacak olsa da hesap baştan seçilir; sadece ürün hesapları geçerli
+  if (igAccountId) {
+    const account = await IgAccount.findById(igAccountId);
+    if (!account?.is_product) {
+      const err = new Error('Seçilen hesap ürün hesabı değil (Instagram Hesapları sayfasından işaretle).');
+      err.status = 400;
+      throw err;
+    }
+  } else if (autoPublish) {
+    const err = new Error('Otomatik paylaşım için bir ürün hesabı seç.');
     err.status = 400;
     throw err;
   }

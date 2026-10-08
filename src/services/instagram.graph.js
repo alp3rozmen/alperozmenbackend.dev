@@ -1,5 +1,4 @@
 const axios = require('axios');
-const Setting = require('../models/Setting');
 
 // Instagram resmi API'si (Instagram Login). Resmi olmayan instagram-private-api'den farklı olarak hesap riski yok.
 const API_VERSION = 'v25.0';
@@ -14,17 +13,11 @@ function graphError(err) {
   return new Error(e?.error_user_msg || e?.message || err.message);
 }
 
-// Hesap verilmezse Ayarlar'daki eski tek hesap kullanılır
-async function credentials(account) {
-  if (account) return { userId: account.ig_user_id, token: account.access_token };
-  return { userId: await Setting.get('ig_user_id'), token: await Setting.get('ig_access_token') };
-}
-
 // Instagram videoyu videoUrl'den kendisi indirir; adres herkese açık ve bot korumasız olmalı.
 // (Doğrudan dosya yükleme / resumable upload sadece Facebook Login for Business uygulamalarında var.)
 async function publishReel({ videoUrl, caption, account }) {
-  const { userId, token } = await credentials(account);
-  if (!userId || !token) throw new Error('Instagram hesabı seçilmedi veya token tanımlı değil (Instagram Kanalları sayfası)');
+  if (!account?.ig_user_id || !account?.access_token) throw new Error('Instagram hesabı seçilmedi (Instagram Hesapları sayfası)');
+  const { ig_user_id: userId, access_token: token } = account;
 
   try {
     const { data: container } = await axios.post(`${BASE_URL}/${userId}/media`, null, {

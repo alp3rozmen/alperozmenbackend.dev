@@ -76,6 +76,7 @@ async function assertBudget() {
 
 // Fikir + Grok görevi. slot: zamanlanmış saat ya da elle üretimde "manual-<zaman>"
 async function generate(account, slot) {
+  if (account.is_product) throw Object.assign(new Error('Bu bir ürün hesabı; niş videosu üretilmez.'), { status: 400 });
   if (!account.niche) throw Object.assign(new Error('Önce hesaba bir niş seç.'), { status: 400 });
   await assertBudget();
   const id = await ChannelVideo.createForSlot({ account_id: account.id, slot });
@@ -255,7 +256,7 @@ telegram.onCallback('cv', async ([action, idText], query) => {
 async function scheduleTick() {
   const now = Date.now();
   for (const account of await IgAccount.list()) {
-    if (!account.active || !account.niche) continue;
+    if (!account.active || !account.niche || account.is_product) continue;
     for (const slot of todaySlots(account, now)) {
       if (now < slot.at - LEAD_MIN * 60_000 || now > slot.at + LATE_MIN * 60_000) continue;
       await generate(account, slot.key).catch((err) => {
@@ -321,6 +322,15 @@ async function updateAccount(id, fields) {
     out.video_seconds = seconds;
   }
   if (fields.active !== undefined) out.active = !!fields.active;
+  // Ürün hesabı niş otomasyonuna girmez; işaretlenince otomatik üretim kapanır
+  if (fields.isProduct !== undefined) {
+    out.is_product = !!fields.isProduct;
+    if (out.is_product) out.active = false;
+  }
+  const isProduct = 'is_product' in out ? out.is_product : account.is_product;
+  if (out.active && isProduct) {
+    throw Object.assign(new Error('Ürün hesabında otomatik niş üretimi açılamaz.'), { status: 400 });
+  }
   const willBeActive = 'active' in out ? out.active : account.active;
   const niche = 'niche' in out ? out.niche : account.niche;
   if (willBeActive && !niche) {
@@ -348,22 +358,8 @@ async function removeVideo(id) {
   return ChannelVideo.remove(id);
 }
 
-// Ayarlar'daki eski tek hesap varsa bir kez hesap listesine taşınır
-async function importLegacyAccount() {
-  const Setting = require('../../models/Setting');
-  const token = await Setting.get('ig_access_token');
-  if (!token || (await IgAccount.list()).length) return;
-  try {
-    await addAccount({ accessToken: token });
-    console.log('Ayarlar\'daki Instagram hesabı hesap listesine eklendi');
-  } catch (err) {
-    console.error('Eski Instagram hesabı taşınamadı:', err.message);
-  }
-}
-
 async function resume() {
   try {
-    await importLegacyAccount();
     for (const video of await ChannelVideo.findByStatus('rendering')) {
       renderService.exclusive(() => render(video.id)).catch(() => {});
     }

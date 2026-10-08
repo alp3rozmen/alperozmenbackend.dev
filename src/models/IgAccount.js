@@ -1,6 +1,8 @@
 const { db } = require('../config/db');
 
-const parse = (row) => row && { ...row, active: !!row.active, niche_brief: row.niche_brief ? JSON.parse(row.niche_brief) : null };
+const parse = (row) => row && {
+  ...row, active: !!row.active, is_product: !!row.is_product, niche_brief: row.niche_brief ? JSON.parse(row.niche_brief) : null,
+};
 
 // Panelde token gösterilmez
 const view = (row) => {
@@ -28,6 +30,7 @@ function serialize(fields) {
   const out = { ...fields };
   if (out.niche_brief !== undefined) out.niche_brief = out.niche_brief ? JSON.stringify(out.niche_brief) : null;
   if (out.active !== undefined) out.active = out.active ? 1 : 0;
+  if (out.is_product !== undefined) out.is_product = out.is_product ? 1 : 0;
   return out;
 }
 
