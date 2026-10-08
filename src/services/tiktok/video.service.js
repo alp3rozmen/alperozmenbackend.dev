@@ -6,6 +6,7 @@ const telegram = require('../telegram');
 const Setting = require('../../models/Setting');
 const TiktokVideo = require('../../models/TiktokVideo');
 const ProductVideo = require('../../models/ProductVideo');
+const ChannelVideo = require('../../models/ChannelVideo');
 const { ideaItem, buildCaption } = require('./caption');
 
 const STORAGE_DIR = path.join(__dirname, '..', '..', '..', 'storage', 'tiktok');
@@ -22,10 +23,11 @@ function monthStart() {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-// Hook klipleri + otomatik ürün videoları aynı aylık limitten düşer
+// Hook klipleri + otomatik ürün videoları + kanal videoları aynı aylık limitten düşer
 async function monthlyUsage() {
   const since = monthStart();
-  const used = (await TiktokVideo.creditsSince(since)) + (await ProductVideo.creditsSince(since));
+  const used = (await TiktokVideo.creditsSince(since)) + (await ProductVideo.creditsSince(since))
+    + (await ChannelVideo.creditsSince(since));
   const limit = Number(await Setting.get('kie_monthly_credit_limit')) || 0;
   return { used, limit, usedUsd: used * CREDIT_USD, limitUsd: limit * CREDIT_USD };
 }

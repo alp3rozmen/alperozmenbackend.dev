@@ -6,7 +6,8 @@ const kie = require('./kie.api');
 const gemini = require('./gemini');
 const ffmpeg = require('./ffmpeg');
 const telegram = require('../telegram');
-const instagram = require('../instagram.graph');
+const igpublish = require('./igpublish');
+const IgAccount = require('../../models/IgAccount');
 const renderService = require('./render.service');
 const videoService = require('./video.service');
 const { buildCaption } = require('./caption');
@@ -218,21 +219,16 @@ async function publish(id) {
 
   await ProductVideo.update(id, { publish_status: 'pending', publish_error: null });
   try {
-    // Site bot korumasının arkasında (Instagram'ın indiricisi doğrulama sayfasına takılır);
-    // video bu yüzden kie.ai'nin herkese açık deposuna yüklenip oradan verilir (24 saat tutulur)
-    // Eski render'larda edit list kalmış olabilir; yeniden kodlamadan temiz bir kopya çıkar
-    const clean = path.join(os.tmpdir(), `product-video-${id}-ig.mp4`);
-    let videoUrl;
-    try {
-      await ffmpeg.run(['-i', filePath(video.file_path), '-c', 'copy', '-movflags', '+faststart', '-use_editlist', '0', clean]);
-      videoUrl = await kie.uploadFile(clean, 'video/mp4', `product-video-${id}.mp4`);
-    } finally {
-      await fs.promises.unlink(clean).catch(() => {});
-    }
+    // Hesap seçilmediyse Ayarlar'daki eski tek hesap kullanılır
+    const account = video.ig_account_id ? await IgAccount.findById(video.ig_account_id) : null;
+    if (video.ig_account_id && !account) throw new Error('Seçilen Instagram hesabı silinmiş.');
     const caption = `${video.plan.caption}\n\n${video.plan.hashtags.join(' ')}`;
-    const mediaId = await instagram.publishReel({ videoUrl, caption });
+    const mediaId = await igpublish.publishFile({
+      file: filePath(video.file_path), caption, account, name: `product-video-${id}`,
+    });
     await ProductVideo.update(id, { publish_status: 'published', ig_media_id: mediaId });
-    await telegram.sendMessage(`📸 Instagram'da paylaşıldı: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
+    const where = account ? ` (@${account.username})` : '';
+    await telegram.sendMessage(`📸 Instagram'da paylaşıldı${telegram.escapeHtml(where)}: ${telegram.escapeHtml(video.product_name)} (#${id})`).catch(() => {});
   } catch (err) {
     await ProductVideo.update(id, { publish_status: 'fail', publish_error: short(err) });
     await telegram.sendMessage(`⚠️ Instagram paylaşımı başarısız (#${id}): ${telegram.escapeHtml(short(err))}`).catch(() => {});
@@ -265,7 +261,7 @@ function ensurePoller() {
   }, POLL_MS);
 }
 
-async function start({ productName, notes, photos, autoPublish, quality }) {
+async function start({ productName, notes, photos, autoPublish, quality, igAccountId }) {
   if (!QUALITIES.includes(quality)) {
     const err = new Error(`Kalite şunlardan biri olmalı: ${QUALITIES.join(', ')}`);
     err.status = 400;
@@ -277,7 +273,9 @@ async function start({ productName, notes, photos, autoPublish, quality }) {
     err.status = 403;
     throw err;
   }
-  const id = await ProductVideo.create({ product_name: productName, notes: notes || null, auto_publish: autoPublish ? 1 : 0 });
+  const id = await ProductVideo.create({
+    product_name: productName, notes: notes || null, auto_publish: autoPublish ? 1 : 0, ig_account_id: igAccountId || null,
+  });
   // Uzun sürer (yükleme + Gemini); istek beklemesin, panel durumu sorgular
   prepare(id, { productName, notes, photos, quality }).catch((err) => {
     console.error(`Ürün videosu #${id} hazırlık hatası:`, err.message);

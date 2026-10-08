@@ -141,3 +141,39 @@ CREATE TABLE IF NOT EXISTS product_videos (
   completedAt DATETIME NULL,
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Instagram hesapları (Instagram Login token'ı ile); her hesabın kendi nişi ve paylaşım saatleri var
+CREATE TABLE IF NOT EXISTS ig_accounts (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(100) NOT NULL,
+  ig_user_id VARCHAR(64) NOT NULL UNIQUE,
+  access_token TEXT NOT NULL,
+  token_refreshed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  niche VARCHAR(200) NULL,
+  niche_brief TEXT NULL,
+  post_times VARCHAR(100) NOT NULL DEFAULT '12:00,20:00',
+  video_seconds TINYINT UNSIGNED NOT NULL DEFAULT 6,
+  active TINYINT(1) NOT NULL DEFAULT 0,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Niş kanalları için üretilen videolar; Telegram'dan onaylanınca ilgili hesaba paylaşılır
+CREATE TABLE IF NOT EXISTS channel_videos (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  account_id INT UNSIGNED NOT NULL,
+  slot VARCHAR(20) NOT NULL,
+  status ENUM('generating','rendering','ready','publishing','published','skipped','fail') NOT NULL DEFAULT 'generating',
+  idea TEXT NULL,
+  kie_task_id VARCHAR(100) NULL,
+  credits DECIMAL(10,2) NULL,
+  file_path VARCHAR(255) NULL,
+  ig_media_id VARCHAR(64) NULL,
+  error VARCHAR(500) NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completedAt DATETIME NULL,
+  UNIQUE KEY uq_account_slot (account_id, slot),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Ürün videolarının paylaşılacağı hesap (mevcut tabloya ek kolon; bir kez çalıştır)
+ALTER TABLE product_videos ADD COLUMN IF NOT EXISTS ig_account_id INT UNSIGNED NULL;

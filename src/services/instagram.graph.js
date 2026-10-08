@@ -14,12 +14,17 @@ function graphError(err) {
   return new Error(e?.error_user_msg || e?.message || err.message);
 }
 
+// Hesap verilmezse Ayarlar'daki eski tek hesap kullanılır
+async function credentials(account) {
+  if (account) return { userId: account.ig_user_id, token: account.access_token };
+  return { userId: await Setting.get('ig_user_id'), token: await Setting.get('ig_access_token') };
+}
+
 // Instagram videoyu videoUrl'den kendisi indirir; adres herkese açık ve bot korumasız olmalı.
 // (Doğrudan dosya yükleme / resumable upload sadece Facebook Login for Business uygulamalarında var.)
-async function publishReel({ videoUrl, caption }) {
-  const userId = await Setting.get('ig_user_id');
-  const token = await Setting.get('ig_access_token');
-  if (!userId || !token) throw new Error('Instagram kullanıcı id veya erişim token\'ı tanımlı değil (Ayarlar sayfası)');
+async function publishReel({ videoUrl, caption, account }) {
+  const { userId, token } = await credentials(account);
+  if (!userId || !token) throw new Error('Instagram hesabı seçilmedi veya token tanımlı değil (Instagram Kanalları sayfası)');
 
   try {
     const { data: container } = await axios.post(`${BASE_URL}/${userId}/media`, null, {
@@ -53,4 +58,26 @@ async function publishReel({ videoUrl, caption }) {
   }
 }
 
-module.exports = { publishReel };
+// Token'dan hesabın yayın id'si ve kullanıcı adı; hesap eklerken token'ın geçerli olduğunu da doğrular
+async function getProfile(token) {
+  try {
+    const { data } = await axios.get(`${BASE_URL}/me`, { params: { fields: 'user_id,username', access_token: token }, timeout: 30_000 });
+    return { igUserId: String(data.user_id), username: data.username };
+  } catch (err) {
+    throw err.response ? graphError(err) : err;
+  }
+}
+
+// Uzun ömürlü token 60 gün geçerli; en az 24 saatlik token yenilenip süre tekrar 60 güne çıkar
+async function refreshToken(token) {
+  try {
+    const { data } = await axios.get('https://graph.instagram.com/refresh_access_token', {
+      params: { grant_type: 'ig_refresh_token', access_token: token }, timeout: 30_000,
+    });
+    return data.access_token;
+  } catch (err) {
+    throw err.response ? graphError(err) : err;
+  }
+}
+
+module.exports = { publishReel, getProfile, refreshToken };

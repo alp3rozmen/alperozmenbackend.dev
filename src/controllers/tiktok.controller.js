@@ -280,6 +280,7 @@ exports.createProductVideo = async (req, res) => {
       photos,
       autoPublish: req.body.autoPublish === 'true',
       quality: req.body.quality || 'economy',
+      igAccountId: Number(req.body.igAccountId) || null,
     });
     res.status(201).json(productVideoView(video));
   } catch (err) {

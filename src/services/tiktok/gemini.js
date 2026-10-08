@@ -174,4 +174,99 @@ async function generateProductPlan({ productName, notes, photos }) {
   return plan;
 }
 
-module.exports = { generateIdeas, generateProductPlan };
+// --- Niş kanalları (yüzsüz, viral AI video hesapları) ---
+
+const NICHES_SCHEMA = {
+  type: 'object',
+  properties: {
+    niches: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Nişin kısa Türkçe adı, örn. "Böceklerin gizli hayatı (komik)"' },
+          description: { type: 'string', description: 'Videoların ne anlattığı, tonu ve görsel tarzı, 2-3 cümle' },
+          why: { type: 'string', description: 'Neden büyüyor / neden takipçi kazandırıyor, araştırmaya dayanarak, 1-2 cümle' },
+          examples: { type: 'array', items: { type: 'string' }, description: '4 örnek video fikri, birer cümle' },
+          visualStyle: { type: 'string', description: 'İngilizce kısa görsel stil tarifi; tüm videoların prompt\'una eklenecek (tutarlı kanal görünümü)' },
+          hashtags: { type: 'array', items: { type: 'string' }, description: 'Nişin temel hashtag\'leri, 6-10 adet, # ile' },
+        },
+        required: ['name', 'description', 'why', 'examples', 'visualStyle', 'hashtags'],
+      },
+    },
+  },
+  required: ['niches'],
+};
+
+// Google aramasıyla büyüyen yüzsüz AI video nişlerini araştırıp 5 öneri döner.
+// hint: kullanıcının aklındaki yön (opsiyonel), örn. "komik hayvanlar"
+async function suggestNiches({ hint } = {}) {
+  const ai = await client();
+  const model = await Setting.get('gemini_text_model');
+
+  const research = await generate(ai, {
+    model,
+    contents: 'Instagram Reels ve TikTok\'ta son aylarda hızla takipçi kazanan, yüzü görünmeyen, tamamen yapay zekayla ' +
+      'üretilmiş kısa video hesaplarını araştır (örn. konuşan/komik böcekler, minik insanlar, hayvan POV, ASMR, absürt mini hikâyeler). ' +
+      'Hangi nişler büyüyor, videoları kaç saniye ve nasıl kurgulanıyor, neden paylaşılıyor, Türkiye\'de karşılığı ne? ' +
+      (hint ? `Kullanıcının ilgilendiği yön: ${hint}. ` : '') +
+      'Kısa maddeler halinde, Türkçe yaz.',
+    config: { tools: [{ googleSearch: {} }] },
+  });
+
+  const response = await generate(ai, {
+    model,
+    contents: `Araştırma:\n${research.text || ''}\n\n` +
+      'Bu araştırmaya dayanarak yeni açılacak bir Instagram hesabı için 5 farklı niş öner. Kısıtlar:\n' +
+      '- Her video tek bir 6-10 saniyelik yapay zeka klibi olacak (text-to-video, sesli). Konuşma yerine ses efekti/müzikle anlaşılmalı.\n' +
+      '- Gerçek kişi, marka, ünlü veya telifli karakter kullanılmayacak.\n' +
+      '- Dil bağımsız ya da Türk izleyiciye uygun olsun; ekran yazısı ve açıklama Türkçe olacak.\n' +
+      '- Seri hissi veren, tekrar tekrar üretilebilen bir format olsun.',
+    config: { responseMimeType: 'application/json', responseJsonSchema: NICHES_SCHEMA },
+  });
+
+  return { research: research.text || '', niches: JSON.parse(response.text).niches };
+}
+
+const CHANNEL_IDEA_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', description: 'Fikrin kısa Türkçe adı (tekrarları önlemek için kaydedilir)' },
+    prompt: {
+      type: 'string',
+      description: 'İngilizce text-to-video prompt: dikey 9:16, tek kesintisiz çekim, başta güçlü bir an, kamera, ışık, ses efektleri',
+    },
+    hookText: { type: 'string', description: 'Videonun ilk 2-3 saniyesindeki Türkçe ekran yazısı, en fazla 6 kelime' },
+    caption: { type: 'string', description: 'Instagram açıklaması, Türkçe, 1-2 kısa cümle + takip etmeye çağrı' },
+    hashtags: { type: 'array', items: { type: 'string' }, description: '8-12 hashtag, # ile; nişin temel etiketleri + bu videoya özel' },
+  },
+  required: ['title', 'prompt', 'hookText', 'caption', 'hashtags'],
+};
+
+// Bir kanal için yeni video fikri; son başlıklar verilerek tekrar engellenir
+async function generateChannelIdea({ niche, brief, seconds, recentTitles }) {
+  const ai = await client();
+  const model = await Setting.get('gemini_text_model');
+  const style = brief?.visualStyle ? `Kanalın sabit görsel stili (prompt'a dahil et): ${brief.visualStyle}\n` : '';
+
+  const response = await generate(ai, {
+    model,
+    contents: `Instagram kanalı nişi: ${niche}\n` +
+      (brief?.description ? `Niş tarifi: ${brief.description}\n` : '') +
+      (brief?.examples?.length ? `Örnek fikirler: ${brief.examples.join(' | ')}\n` : '') +
+      style +
+      (brief?.hashtags?.length ? `Nişin temel hashtag'leri: ${brief.hashtags.join(' ')}\n` : '') +
+      (recentTitles.length ? `Daha önce yapılanlar (bunları ve benzerlerini TEKRAR ETME): ${recentTitles.join(' | ')}\n` : '') +
+      `\nBu kanal için ${seconds} saniyelik tek bir viral yapay zeka videosu fikri üret.\n` +
+      'Kurallar:\n' +
+      '- İlk saniyede dikkat çeken, sonunda küçük bir sürpriz/espri olan, tekrar izletecek bir an.\n' +
+      '- prompt İngilizce; tek sahne, dikey 9:16, sinematik; ne olduğunu, kamerayı, ışığı ve sesleri (efekt/müzik) tarif et. ' +
+      'No speech, no dialogue, no voiceover. No text, letters, subtitles, logos or watermarks in the video. ' +
+      'No real people, celebrities, brands or copyrighted characters.\n' +
+      '- hookText ve açıklama Türkçe, doğal ve merak uyandıran.',
+    config: { responseMimeType: 'application/json', responseJsonSchema: CHANNEL_IDEA_SCHEMA },
+  });
+  return JSON.parse(response.text);
+}
+
+module.exports = { generateIdeas, generateProductPlan, suggestNiches, generateChannelIdea };
