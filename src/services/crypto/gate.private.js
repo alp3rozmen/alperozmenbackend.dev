@@ -80,6 +80,11 @@ async function request(method, path, { query = {}, body } = {}) {
       data: payload || undefined,
       timeout: 20_000,
       transformRequest: [(d) => d], // imzalanan metin aynen gönderilsin
+      // Emir kimlikleri int64; JSON.parse 2^53'ü aşanları bozar. Kimlik alanları ayrıştırmadan önce metne çevrilir.
+      transformResponse: [(raw) => {
+        if (typeof raw !== 'string' || !raw) return raw;
+        return JSON.parse(raw.replace(/"(id|fired_order_id)"\s*:\s*(\d+)/g, '"$1":"$2"'));
+      }],
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -175,6 +180,7 @@ function normalizeOrder(o) {
     avgPrice,
     fee: Number(o.fee) || 0,
     feeCurrency: o.fee_currency,
+    gtFee: Number(o.gt_fee) || 0, // GT ile komisyon indirimi açıksa komisyon burada (GT cinsinden)
     text: o.text,
   };
 }
@@ -244,18 +250,43 @@ async function createStop({ pair, side = 'sell', rule, triggerPrice, amount, exp
   return String(data.id_string || data.id);
 }
 
-// Dönüş: { status: open|cancelled|finish|failed|expired, firedOrderId, reason }
-async function getStop(id) {
-  const data = await request('GET', `/spot/price_orders/${id}`);
+function normalizeStop(data) {
   const fired = data.fired_order_id && String(data.fired_order_id) !== '0' ? String(data.fired_order_id) : null;
   return { status: data.status, firedOrderId: fired, reason: data.reason || null };
 }
 
-async function cancelStop(id) {
-  await request('DELETE', `/spot/price_orders/${id}`);
+// Dönüş: { status: open|cancelled|finish|failed|expired, firedOrderId, reason }. Bulunamazsa label ORDER_NOT_FOUND ile hata.
+async function getStop(id) {
+  return normalizeStop(await request('GET', `/spot/price_orders/${id}`));
+}
+
+// İptali DOĞRULANMIŞ olarak yapar: Gate artık "open" demiyorsa döner (cancelled / finish / failed / expired / gone);
+// emin olunamazsa hata fırlatır (çağıran stopu canlı saymalı). Tetiklenmişse firedOrderId döner.
+async function cancelStopConfirmed(id) {
+  try {
+    const data = await request('DELETE', `/spot/price_orders/${id}`);
+    if (data?.status && data.status !== 'open') return normalizeStop(data);
+  } catch (err) {
+    if (err.label === 'ORDER_NOT_FOUND') return { status: 'gone', firedOrderId: null };
+  }
+  const state = await getStop(id); // hata verirse çağırana gider: iptal doğrulanamadı
+  if (state.status === 'open') throw new Error(`Stop ${id} iptal edilemedi (hâlâ açık)`);
+  return state;
+}
+
+// Bu çift için borsada açık duran tetikli satış emirleri (oluşturma isteği zaman aşımına uğradıysa emri bulmak için)
+async function findStop({ pair, rule, triggerPrice, amount }) {
+  const info = await pairInfo(pair);
+  const rows = await request('GET', '/spot/price_orders', { query: { status: 'open', market: pair, account: 'normal' } });
+  const price = dec(triggerPrice, info.pricePrecision);
+  const qty = dec(amount, info.amountPrecision);
+  const hit = rows.find((r) => r.put?.side === 'sell' && r.trigger?.rule === rule
+    && dec(r.trigger?.price, info.pricePrecision) === price && dec(r.put?.amount, info.amountPrecision) === qty);
+  return hit ? String(hit.id_string || hit.id) : null;
 }
 
 module.exports = {
-  balances, pairInfo, marketBuy, marketSell, getOrder, findOrderByText, createStop, getStop, cancelStop, _sign: sign, _dec: dec,
+  balances, pairInfo, marketBuy, marketSell, getOrder, findOrderByText, createStop, getStop, cancelStopConfirmed, findStop,
+  _sign: sign, _dec: dec,
   _resetAccountMode: () => { accountModeCheckedAt = 0; }, // testler için
 };

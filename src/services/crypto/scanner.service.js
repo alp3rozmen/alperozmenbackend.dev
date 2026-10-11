@@ -334,6 +334,11 @@ function tick() {
       const result = await findNewSignals(tickers);
 
       lastScan = { at: new Date(), durationMs: Date.now() - started, ...result };
+      // Sunucu log'unda (cPanel > Node.js uygulaması / stdout) botun yaşadığını ve ne yaptığını görmek için
+      const summary = result.waiting ? 'mum kapanışı bekleniyor'
+        : result.marketHealthy === false ? 'BTC zayıf, sinyal aranmadı'
+        : `${result.candidates} coin tarandı, ${result.signals} sinyal${result.opened?.length ? ` (${result.opened.join(', ')})` : ''}`;
+      console.log(`[kripto] ${lastScan.at.toISOString()} ${settings.timeframe} tarama: ${summary} · ${lastScan.durationMs}ms`);
       await CryptoSignal.saveState({ last_scan_at: lastScan.at, last_error: null });
       if (settings.statusReports) await sendStatusReport(lastScan, closed, tickers);
       return lastScan;

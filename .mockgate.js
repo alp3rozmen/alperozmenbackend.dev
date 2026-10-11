@@ -5,7 +5,7 @@ const KEY = 'testkey', SECRET = 'testsecret';
 const S = {
   balances: { USDT: 1000 }, prices: { SOL_USDT: 100 }, orders: new Map(), stops: new Map(),
   nextOrder: 5_000_000_001, nextStop: 9_007_199_254_740_993n, // 2^53'ten büyük: id_string kullanılıyor mu?
-  mode: 'classic', sellFillRatio: 1, dropNextOrderResponse: false, log: [],
+  mode: 'classic', sellFillRatio: 1, dropNextOrderResponse: false, dropNextStopResponse: false, failStopGet: false, failCancel: false, log: [],
 };
 const PAIRS = { SOL_USDT: { id: 'SOL_USDT', min_base_amount: '0.001', min_quote_amount: '3', amount_precision: 3, precision: 2, trade_status: 'tradable', type: 'normal' } };
 const bal = (c) => S.balances[c] || 0;
@@ -91,18 +91,30 @@ const server = http.createServer((req, res) => {
       const o = S.orders.get(path.split('/').pop());
       return o ? send(200, o) : send(404, { label: 'ORDER_NOT_FOUND', message: 'nf' });
     }
+    if (path === '/api/v4/spot/price_orders' && req.method === 'GET') {
+      // liste: kimlikler ham int64 (id_string yok) — istemci büyük sayıyı bozmadan okuyabiliyor mu?
+      const m = url.searchParams.get('market');
+      const rows = [...S.stops.values()].filter((st) => st.status === 'open' && (!m || st.market === m));
+      return send(200, '[' + rows.map((st) => JSON.stringify({ ...st, id: '__ID__' }).replace('"__ID__"', String(st.id))).join(',') + ']');
+    }
     if (path === '/api/v4/spot/price_orders' && req.method === 'POST') {
       const b = JSON.parse(body);
       if (b.put.account !== 'normal' || !b.put.price || typeof b.trigger.expiration !== 'number' || b.put.time_in_force !== 'ioc') return send(400, { label: 'INVALID_PARAM_VALUE', message: 'bad price order ' + body });
       if (/e/i.test(b.trigger.price + b.put.amount)) return send(400, { label: 'INVALID_PARAM_VALUE', message: 'exponent' });
       const id = S.nextStop++;
       S.stops.set(String(id), { ...b, id, status: 'open', fired_order_id: 0 });
+      if (S.dropNextStopResponse) { S.dropNextStopResponse = false; return req.socket.destroy(); }
       return send(201, `{"id":${id},"id_string":"${id}"}`);
     }
     if (path.startsWith('/api/v4/spot/price_orders/')) {
       const st = S.stops.get(path.split('/').pop());
       if (!st) return send(404, { label: 'ORDER_NOT_FOUND', message: 'nf' });
-      if (req.method === 'DELETE') { if (st.status === 'open') st.status = 'cancelled'; return send(200, st); }
+      if (req.method === 'DELETE') {
+        if (S.failCancel) return send(502, 'Bad Gateway');
+        if (st.status === 'open') st.status = 'cancelled';
+        return send(200, { ...st, id: String(st.id) });
+      }
+      if (S.failStopGet) return send(503, 'Service Unavailable');
       return send(200, { ...st, id: String(st.id) });
     }
     send(404, { label: 'NOT_FOUND', message: path });

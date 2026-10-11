@@ -4,7 +4,8 @@ const { client, generate } = require('../tiktok/gemini');
 // Gemini haberleri sadece filtre olarak kullanılır: fiyat tahmini yapmaz, alım kararını teknik sinyal verir.
 // Haber kontrolü hata verirse işlem engellenmez (teknik sinyal yine geçerli); sebep loglanır.
 
-const VERDICT_RE = /KARAR:\s*(GİR|GIR|GİRME|GIRME)/i;
+// "GİRME"nin "GİR" olarak yakalanmaması için ME ayrı grup; \W* Gemini'nin eklediği **kalın** yazıyı da geçer
+const VERDICT_RE = /KARAR\W*G[İIi]R(ME)?/i;
 
 // Alımdan önce: son 7 günde coin için ciddi olumsuz haber var mı?
 async function checkCoin(pair) {
@@ -24,7 +25,7 @@ async function checkCoin(pair) {
   const text = (response.text || '').trim();
   const match = text.match(VERDICT_RE);
   const reason = (text.match(/NEDEN:\s*(.+)/i)?.[1] || text.split('\n')[1] || '').trim().slice(0, 400);
-  const avoid = !!match && /GİRME|GIRME/i.test(match[1]);
+  const avoid = !!match && !!match[1];
   return { avoid, reason: reason || (match ? '' : 'Gemini cevabı anlaşılamadı, teknik sinyalle devam') };
 }
 

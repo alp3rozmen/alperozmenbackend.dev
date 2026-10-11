@@ -11,4 +11,5 @@ scanner.tickIfRunning()
     console.error(new Date().toISOString(), 'Tarama hatası:', err.message);
     process.exitCode = 1;
   })
-  .finally(() => db.end());
+  // Açık zamanlayıcı/bağlantı kalırsa cron süreci kapanmaz; her çalıştırma bitince süreç sonlandırılır
+  .finally(() => db.end().catch(() => {}).then(() => process.exit(process.exitCode || 0)));

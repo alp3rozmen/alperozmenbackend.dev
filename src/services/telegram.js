@@ -78,14 +78,16 @@ async function clearButtons(messageId) {
 // --- Buton tıklamalarını dinleme (getUpdates long polling) ---
 // Webhook kullanılamaz: site bot korumasının arkasında, Telegram'ın POST'u doğrulama sayfasına takılır.
 
-const handlers = new Map(); // callback_data öneki -> async (args, query) => cevap metni
+const handlers = new Map(); // callback_data öneki -> { handler: async (args, query) => cevap metni, ownerOnly }
 const knownChats = new Map(); // chat id bulmak için (polling açıkken getUpdates'i başkası okuyamaz)
 let polling = false;
 let offset = 0;
 
-// "cv:pub:12" gibi veriler ':' ile bölünür; ilk parça hangi işleyicinin çalışacağını seçer
-function onCallback(prefix, handler) {
-  handlers.set(prefix, handler);
+// "cv:pub:12" gibi veriler ':' ile bölünür; ilk parça hangi işleyicinin çalışacağını seçer.
+// ownerOnly: buton sadece botla birebir (özel) sohbette, o sohbetin sahibi tarafından basılabilir
+// (ayarlı sohbet bir grup/kanalsa üyeler para hareketi yapan butonlara basamasın)
+function onCallback(prefix, handler, { ownerOnly = false } = {}) {
+  handlers.set(prefix, { handler, ownerOnly });
   startPolling();
 }
 
@@ -95,10 +97,13 @@ async function handleCallback(query, token, chatId) {
   // Sadece ayarlı sohbetten gelen tıklamalar kabul edilir (bot başka yere eklenirse kimse tetikleyemesin)
   if (String(query.message?.chat?.id) !== String(chatId)) return answer('Yetkisiz');
   const [prefix, ...args] = String(query.data || '').split(':');
-  const handler = handlers.get(prefix);
-  if (!handler) return answer('Bilinmeyen işlem');
+  const entry = handlers.get(prefix);
+  if (!entry) return answer('Bilinmeyen işlem');
+  if (entry.ownerOnly && (query.message?.chat?.type !== 'private' || String(query.from?.id) !== String(chatId))) {
+    return answer('Bu işlem sadece botun sahibi tarafından özel sohbetten yapılabilir');
+  }
   try {
-    await answer(await handler(args, query) || 'Tamam');
+    await answer(await entry.handler(args, query) || 'Tamam');
   } catch (err) {
     await answer(`Hata: ${String(err.message).slice(0, 150)}`);
   }

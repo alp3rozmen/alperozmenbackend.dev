@@ -39,6 +39,7 @@ const TR_OFFSET_MS = 3 * 3_600_000;
 const HOLD_HOURS = { '15m': 24, '1h': 96, '4h': 384 };
 
 let monitorTimer = null;
+let started = false; // sadece ana uygulamada (index.js) true; cron süreci fırsat taraması/dinleme yapmasın
 let lastOpportunityRun = 0;
 const newsCache = new Map(); // pair -> { at, result }
 const alerted = new Set();   // aynı uyarıyı her dakika tekrar atma (trade id + tür)
@@ -214,6 +215,7 @@ async function opportunityBases() {
 }
 
 async function refreshOpportunities(tickers) {
+  if (!started) return; // cron gibi kısa ömürlü süreçlerde ücretli Gemini aramasını tekrar tekrar yapma
   const cfg = await config();
   if (cfg.newsMode !== 'veto+opportunities' || Date.now() - lastOpportunityRun < OPPORTUNITY_EVERY_MS) return;
   lastOpportunityRun = Date.now();
@@ -306,8 +308,60 @@ async function waitFilled(pair, order) {
   return order;
 }
 
+// GT ile ödenen komisyonun USDT karşılığı (komisyon indirimi açıksa ücret GT'den düşer, maliyete eklenmeli)
+async function gtFeeUsdt(order) {
+  if (!(order.gtFee > 0)) return 0;
+  return order.gtFee * ((await lastPrice('GT_USDT')) || 0);
+}
+
+// Stop durumunu okur. Sadece kesin cevaplar "yok" sayılır; geçici hatada 'unknown' döner (o tur hiçbir şey değişmez)
+async function stopState(id) {
+  if (!id) return { status: 'none' };
+  try {
+    return await gp.getStop(id);
+  } catch (err) {
+    return err.label === 'ORDER_NOT_FOUND' ? { status: 'gone' } : { status: 'unknown', error: short(err) };
+  }
+}
+const DEAD = ['cancelled', 'failed', 'expired', 'gone', 'none'];
+
+// Stopu doğrulayarak iptal eder; doğrulanamazsa işlemin pending_cancel listesine yazılır, takip tekrar dener.
+// Dönüş: tetiklenmişse { firedOrderId }, aksi halde null
+async function retireStop(trade, id) {
+  if (!id) return null;
+  try {
+    const state = await gp.cancelStopConfirmed(id);
+    return state.status === 'finish' && state.firedOrderId ? state : null;
+  } catch (err) {
+    const fresh = await CryptoTrade.findById(trade.id);
+    const list = new Set(String(fresh.pending_cancel || '').split(',').filter(Boolean));
+    list.add(String(id));
+    await CryptoTrade.update(trade.id, { pending_cancel: [...list].join(',').slice(0, 500) });
+    return null;
+  }
+}
+
+// İptali doğrulanamamış stopları tekrar dener (kapanmış işlemlerde canlı stop kalmasın)
+async function retryPendingCancels() {
+  for (const trade of await CryptoTrade.findPendingCancels()) {
+    const left = [];
+    for (const id of trade.pending_cancel.split(',').filter(Boolean)) {
+      try {
+        await gp.cancelStopConfirmed(id);
+      } catch {
+        left.push(id);
+      }
+    }
+    await CryptoTrade.update(trade.id, { pending_cancel: left.length ? left.join(',') : null });
+    if (left.length) {
+      await alertOnce(`pendingcancel:${trade.id}`,
+        `⚠️ ${coin(trade.pair)} için ${left.length} stop/hedef emri iptal edilemedi; bot tekrar deniyor. Gerekirse Gate.io'dan elle iptal et.`);
+    }
+  }
+}
+
 // Borsaya stop ve hedef emirlerini koyar. Stop konamazsa satış YAPMAZ: kullanıcıyı "Acil sat" butonuyla uyarır,
-// takip her dakika tekrar dener.
+// takip her dakika tekrar dener. Önce borsada aynı emir zaten var mı bakılır (zaman aşımına uğrayan istek oluşmuş olabilir).
 async function placeProtection(trade) {
   const info = await gp.pairInfo(trade.pair);
   const amount = Number(trade.amount);
@@ -317,24 +371,40 @@ async function placeProtection(trade) {
   const fields = { sl_price: sl, tp_price: tp };
   // Tetik seviyesi fiyatın yanlış tarafındaysa emir konduğu an tetiklenir; konmaz, kullanıcıya sorulur
   const last = await lastPrice(trade.pair);
-  const sell = [[{ text: '🚨 Sat', data: `ct:sell:${trade.id}` }]];
-  if (!trade.sl_order_id && last && last <= sl) {
+  let wantSl = !trade.sl_order_id;
+  let wantTp = !trade.tp_order_id;
+  if (wantSl && last && last <= sl) {
+    wantSl = false;
     await alertOnce(`belowsl:${trade.id}`,
-      `🚨 <b>${coin(trade.pair)}</b> fiyatı (${fmt(last)}) stop seviyesinin (${fmt(sl)}) altında, borsada stop emri yok.`, sell);
-    await CryptoTrade.update(trade.id, fields);
-    return;
+      `🚨 <b>${coin(trade.pair)}</b> fiyatı (${fmt(last)}) stop seviyesinin (${fmt(sl)}) altında, borsada stop emri yok.`,
+      [[{ text: '🚨 Sat', data: `ct:sell:${trade.id}` }]]);
   }
-  if (!trade.tp_order_id && last && last >= tp) {
+  if (wantTp && last && last >= tp) {
+    wantTp = false;
     await alertOnce(`abovetp:${trade.id}`,
       `🎯 <b>${coin(trade.pair)}</b> hedefin (${fmt(tp)}) üstünde (${fmt(last)}). Kârı almak istersen sat:`,
       [[{ text: 'Sat', data: `ct:sell:${trade.id}` }]]);
-    trade = { ...trade, tp_order_id: 'skip' };
   }
 
-  if (!trade.sl_order_id) {
+  const place = async (rule, triggerPrice, key) => {
+    // Önceki turda isteği zaman aşımına uğrayan emir borsada oluşmuş olabilir: varsa onu sahiplen
+    const existing = await gp.findStop({ pair: trade.pair, rule, triggerPrice, amount });
+    if (existing) return existing;
     try {
-      fields.sl_order_id = await gp.createStop({ pair: trade.pair, side: 'sell', rule: '<=', triggerPrice: sl, amount, expiresSec });
-      alerted.delete(`nostop:${trade.id}`);
+      return await gp.createStop({ pair: trade.pair, side: 'sell', rule, triggerPrice, amount, expiresSec });
+    } catch (err) {
+      if (!err.rejected) return null; // belirsiz: sonraki turda findStop ile aranır, tekrar oluşturulmaz
+      throw err;
+    }
+  };
+
+  if (wantSl) {
+    try {
+      const id = await place('<=', sl);
+      if (id) {
+        fields.sl_order_id = id;
+        alerted.delete(`nostop:${trade.id}`);
+      }
     } catch (err) {
       await alertOnce(`nostop:${trade.id}`,
         `🚨 <b>${coin(trade.pair)} pozisyonunun STOP emri konamadı</b> (${telegram.escapeHtml(short(err))}).\n` +
@@ -342,9 +412,10 @@ async function placeProtection(trade) {
         [[{ text: '🚨 Acil sat', data: `ct:sell:${trade.id}` }]]);
     }
   }
-  if (!trade.tp_order_id) {
+  if (wantTp) {
     try {
-      fields.tp_order_id = await gp.createStop({ pair: trade.pair, side: 'sell', rule: '>=', triggerPrice: tp, amount, expiresSec });
+      const id = await place('>=', tp);
+      if (id) fields.tp_order_id = id;
     } catch (err) {
       await alertOnce(`notp:${trade.id}`, `⚠️ ${coin(trade.pair)} hedef emri konamadı, tekrar denenecek: ${telegram.escapeHtml(short(err))}`);
     }
@@ -361,14 +432,14 @@ async function completeEntry(trade, order) {
   const bal = (await gp.balances([base])).get(base);
   const amount = floorTo(Math.min(received, bal ? bal.available : received), info.amountPrecision);
   const entryPrice = order.avgPrice;
-  const cost = order.filledQuote + (order.feeCurrency === 'USDT' ? order.fee : 0);
+  const cost = order.filledQuote + (order.feeCurrency === 'USDT' ? order.fee : 0) + (await gtFeeUsdt(order));
   // Stop/hedef mesafesi sinyalin ATR'sinden gelir; gerçek dolum fiyatına göre yeniden kurulur
   const slDist = Number(trade.signal_entry) - Number(trade.signal_sl);
   const tpDist = Number(trade.signal_tp) - Number(trade.signal_entry);
 
   await CryptoTrade.update(trade.id, {
     status: 'open', entry_order_id: order.id, amount, entry_price: entryPrice, cost_usdt: cost,
-    sl_price: entryPrice - slDist, tp_price: entryPrice + tpDist, opened_at: new Date(),
+    sl_price: entryPrice - slDist, tp_price: entryPrice + tpDist, opened_at: new Date(), error: null,
   });
   if (!(amount > 0) || amount < info.minBase) {
     await alertOnce(`tiny:${trade.id}`, `⚠️ ${base} alındı ama miktar (${amount}) stop koymak için çok küçük. Elle kontrol et.`);
@@ -438,7 +509,13 @@ function approve(id) {
       await CryptoTrade.update(id, { status: 'fail', error: `Emir dolmadı (${order.status})`, closed_at: new Date() });
       throw Object.assign(new Error(`Alım emri dolmadı (${order.status}).`), { status: 502 });
     }
-    await completeEntry({ ...trade, quote_amount: quote }, order);
+    // Alım gerçekleşti: bundan sonraki hata "alınmadı" diye bildirilmez; takip korumayı tamamlar
+    try {
+      await completeEntry({ ...trade, quote_amount: quote }, order);
+    } catch (err) {
+      await notify(`🟢 <b>${coin(trade.pair)} ALINDI</b> ama stop/hedef konurken hata oldu (${telegram.escapeHtml(short(err))}). ` +
+        'Bot 1 dk içinde tekrar deneyecek.', [[{ text: 'Sat', data: `ct:sell:${id}` }]]);
+    }
     return CryptoTrade.findById(id);
   });
 }
@@ -449,10 +526,10 @@ async function reject(id) {
   }
 }
 
-// --- Satış (sadece kullanıcı isteğiyle; stop/hedef zaten borsada) ---
+// --- Satış (sadece kullanıcı isteğiyle ya da borsadaki stop/hedef tetiklenince) ---
 
-function sellProceeds(order) {
-  return order.filledQuote - (order.feeCurrency === 'USDT' ? order.fee : 0);
+async function sellProceeds(order) {
+  return order.filledQuote - (order.feeCurrency === 'USDT' ? order.fee : 0) - (await gtFeeUsdt(order));
 }
 
 async function finalize(trade, reason, { exitOrderId, exitPrice, proceeds }) {
@@ -463,6 +540,7 @@ async function finalize(trade, reason, { exitOrderId, exitPrice, proceeds }) {
   await CryptoTrade.update(trade.id, {
     status: 'closed', exit_reason: reason, exit_order_id: exitOrderId || null, exit_price: exitPrice || null,
     proceeds_usdt: proceeds, pnl_usdt: pnl, pnl_pct: cost ? (pnl / cost) * 100 : null, closed_at: new Date(),
+    pending_text: null, pending_at: null,
   });
   const icon = { tp: '✅ HEDEF', sl: '🛑 STOP', expired: '⌛ SÜRE DOLDU', manual: '✋ SATILDI', external: '👤 HESAPTAN SATILMIŞ', emergency: '🚨 ACİL SATIŞ' }[reason];
   await notify(
@@ -472,39 +550,9 @@ async function finalize(trade, reason, { exitOrderId, exitPrice, proceeds }) {
   );
 }
 
-async function cancelStops(trade) {
-  for (const id of [trade.sl_order_id, trade.tp_order_id]) {
-    if (id) await gp.cancelStop(id).catch(() => {}); // zaten tetiklenmiş/iptal olabilir
-  }
-}
-
 async function lastPrice(pair) {
   const tickers = await gate.fetchTickers().catch(() => []);
   return Number(tickers.find((t) => t.currency_pair === pair)?.last) || null;
-}
-
-// Kullanıcı "Sat" dedi: borsadaki stop/hedef iptal edilir, bot miktarı piyasadan satılır
-async function sellNow(trade, reason) {
-  if (!(await CryptoTrade.transition(trade.id, trade.status, { status: 'closing' }))) return;
-  await cancelStops(trade);
-  const base = coin(trade.pair);
-  const info = await gp.pairInfo(trade.pair);
-  const bal = (await gp.balances([base])).get(base);
-  const sellAmount = floorTo(Math.min(Number(trade.amount) || 0, bal?.available || 0), info.amountPrecision);
-  if (!(sellAmount > 0) || sellAmount < info.minBase) {
-    const last = await lastPrice(trade.pair);
-    return finalize(trade, 'external', { exitPrice: last, proceeds: (Number(trade.amount) || 0) * (last || 0) });
-  }
-  let order;
-  try {
-    order = await gp.marketSell(trade.pair, sellAmount, `t-bot${trade.id}s${Date.now() % 1e6}`);
-  } catch (err) {
-    // Satış olmadı: stop/hedef iptal edildiği için pozisyon açık ve korumasız; açık duruma döndür, takip korumayı geri koyar
-    await CryptoTrade.update(trade.id, { status: 'open', sl_order_id: null, tp_order_id: null, error: `Satış: ${short(err)}` });
-    throw err;
-  }
-  order = await waitFilled(trade.pair, order).catch(() => order);
-  return settleSell(trade, reason, order, sellAmount);
 }
 
 // Satış/stop emri yarım dolduysa (derinlik yetersiz) kalan miktar açık kalır ve yeniden korumaya alınır
@@ -514,21 +562,96 @@ async function settleSell(trade, reason, order, targetAmount) {
   const last = order.avgPrice || (await lastPrice(trade.pair)) || 0;
   const meaningful = remaining >= info.minBase && remaining * last >= Math.max(info.minQuote, 1) && order.filledBase < targetAmount * 0.98;
   if (!meaningful) {
-    return finalize(trade, reason, { exitOrderId: order.id, exitPrice: order.avgPrice, proceeds: sellProceeds(order) });
+    return finalize(trade, reason, { exitOrderId: order.id, exitPrice: order.avgPrice, proceeds: await sellProceeds(order) });
   }
-  const proceedsSoFar = (Number(trade.proceeds_usdt) || 0) + sellProceeds(order);
+  const proceedsSoFar = (Number(trade.proceeds_usdt) || 0) + (await sellProceeds(order));
   await CryptoTrade.update(trade.id, {
     status: 'open', amount: remaining, proceeds_usdt: proceedsSoFar, sl_order_id: null, tp_order_id: null,
+    pending_text: null, pending_at: null,
   });
   await notify(`⚠️ <b>${coin(trade.pair)}</b> satışı yarım doldu (${fmt(order.filledBase)} satıldı, ${fmt(remaining)} kaldı). Kalan için stop/hedef yeniden konuyor.`,
     [[{ text: 'Kalanı sat', data: `ct:sell:${trade.id}` }]]);
   await placeProtection(await CryptoTrade.findById(trade.id));
 }
 
+// Borsadaki stop/hedef tetiklendiyse: önce tetiklenen emrin dolumunu al (hata → bu tur bekle), sonra diğerini doğrulayarak
+// iptal et ve gerçek dolumla kapat
+async function settleFired(trade, fired, other) {
+  const order = await waitFilled(trade.pair, await gp.getOrder(trade.pair, fired.firedOrderId));
+  if (trade.status === 'open' && !(await CryptoTrade.transition(trade.id, 'open', { status: 'closing' }))) return;
+  const otherFired = await retireStop(trade, other.id);
+  if (otherFired) {
+    await alertOnce(`bothfired:${trade.id}`, `⚠️ ${coin(trade.pair)} için hem stop hem hedef tetiklenmiş görünüyor; Gate.io'dan bakiyeyi kontrol et.`);
+  }
+  return settleSell({ ...trade, status: 'closing' }, fired.kind, order, Number(trade.amount));
+}
+
+async function readStops(trade) {
+  // kind: bizim sl/tp etiketimiz (Gate'in yanıtındaki "reason" alanıyla karışmasın diye ayrı ad)
+  const sl = { ...(await stopState(trade.sl_order_id)), kind: 'sl', id: trade.sl_order_id };
+  const tp = { ...(await stopState(trade.tp_order_id)), kind: 'tp', id: trade.tp_order_id };
+  return { sl, tp, unknown: [sl, tp].some((s) => s.status === 'unknown') };
+}
+
+const firedOf = ({ sl, tp }) => [sl, tp].find((s) => s.status === 'finish' && s.firedOrderId) || null;
+
+// Kullanıcı "Sat" dedi. Kendi coinlerine dokunmamak için: tetiklenmiş stop varsa onun satışı esas alınır;
+// stoplar doğrulanarak iptal edilmeden satış yapılmaz; satış cevabı belirsizse tekrar denenmez, emir aranır.
+async function sellNow(trade, reason) {
+  const stops = await readStops(trade);
+  if (stops.unknown) throw new Error('Gate.io stop durumu okunamadı, biraz sonra tekrar dene');
+  const fired = firedOf(stops);
+  if (fired) return settleFired(trade, fired, fired === stops.sl ? stops.tp : stops.sl);
+
+  if (!(await CryptoTrade.transition(trade.id, trade.status, { status: 'closing', exit_reason: reason }))) return;
+  for (const s of [stops.sl, stops.tp]) {
+    if (!s.id || DEAD.includes(s.status)) continue;
+    let result;
+    try {
+      result = await gp.cancelStopConfirmed(s.id);
+    } catch (err) {
+      // Stop canlı olabilir: satış yapılmaz (aynı coin iki kez satılmasın)
+      await CryptoTrade.update(trade.id, { status: 'open' });
+      throw new Error(`Stop iptal edilemedi, satış yapılmadı: ${short(err)}`);
+    }
+    if (result.status === 'finish' && result.firedOrderId) {
+      return settleFired({ ...trade, status: 'closing' }, { ...result, kind: s.kind, id: s.id }, s === stops.sl ? stops.tp : stops.sl);
+    }
+  }
+  await CryptoTrade.update(trade.id, { sl_order_id: null, tp_order_id: null });
+
+  const base = coin(trade.pair);
+  const info = await gp.pairInfo(trade.pair);
+  const bal = (await gp.balances([base])).get(base);
+  const sellAmount = floorTo(Math.min(Number(trade.amount) || 0, bal?.available || 0), info.amountPrecision);
+  if (!(sellAmount > 0) || sellAmount < info.minBase) {
+    const last = await lastPrice(trade.pair);
+    return finalize(trade, 'external', { exitPrice: last, proceeds: (Number(trade.amount) || 0) * (last || 0) });
+  }
+  const text = `t-bot${trade.id}s${Date.now() % 1e6}`;
+  await CryptoTrade.update(trade.id, { pending_text: text, pending_at: new Date() });
+  let order;
+  try {
+    order = await gp.marketSell(trade.pair, sellAmount, text);
+  } catch (err) {
+    if (err.rejected) {
+      // Kesin red: satış olmadı; açık duruma dön, takip stop/hedefi yeniden koyar
+      await CryptoTrade.update(trade.id, { status: 'open', pending_text: null, pending_at: null, error: `Satış reddedildi: ${short(err)}` });
+      throw err;
+    }
+    // Belirsiz: takip emri kimliğiyle arar; bulunamazsa 3 dk sonra açık duruma döner ve koruma yeniden konur
+    throw new Error(`Gate.io cevap vermedi; satış gerçekleşmiş olabilir, kontrol ediliyor (tekrar sat'a basma). ${short(err)}`);
+  }
+  order = await waitFilled(trade.pair, order).catch(() => order);
+  return settleSell({ ...trade, status: 'closing' }, reason, order, sellAmount);
+}
+
 function sell(id) {
   return withTraderLock(async () => {
     const trade = await CryptoTrade.findById(id);
-    if (!trade || !['open', 'closing'].includes(trade.status)) throw Object.assign(new Error('Açık pozisyon bulunamadı.'), { status: 404 });
+    if (!trade || trade.status !== 'open') {
+      throw Object.assign(new Error(trade?.status === 'closing' ? 'Satış zaten sürüyor/kontrol ediliyor.' : 'Açık pozisyon bulunamadı.'), { status: 409 });
+    }
     const expired = Date.now() - new Date(trade.opened_at).getTime() > (await holdHours()) * 3_600_000;
     await sellNow(trade, expired ? 'expired' : 'manual');
     return CryptoTrade.findById(id);
@@ -540,7 +663,7 @@ async function closeAll() {
   await saveConfig({ enabled: false });
   return withTraderLock(async () => {
     for (const p of await CryptoTrade.findProposed()) await CryptoTrade.transition(p.id, 'proposed', { status: 'rejected' });
-    const active = (await CryptoTrade.findActive()).filter((t) => t.status === 'open' || t.status === 'closing');
+    const active = (await CryptoTrade.findActive()).filter((t) => t.status === 'open');
     for (const trade of active) {
       await sellNow(trade, 'emergency').catch((err) => notify(`❌ ${coin(trade.pair)} satış hatası: ${telegram.escapeHtml(short(err))}`));
     }
@@ -548,41 +671,60 @@ async function closeAll() {
   });
 }
 
-// --- Takip (dakikada bir; satış kararı vermez, sadece borsadaki emirleri izler ve korur) ---
+// --- Takip (dakikada bir; satış kararı vermez, borsadaki emirleri izler, korur ve uzlaştırır) ---
+
+async function reconcileClosing(trade) {
+  // Belirsiz biten satış: emri kendi kimliğimizle ara
+  if (trade.pending_text) {
+    const since = Math.floor(new Date(trade.pending_at || Date.now()).getTime() / 1000) - 120;
+    const order = await gp.findOrderByText(trade.pair, trade.pending_text, since);
+    if (order && order.status === 'open') return;
+    if (order) return settleSell(trade, trade.exit_reason || 'manual', order, Number(trade.amount));
+    if (Date.now() - new Date(trade.pending_at).getTime() > OPENING_GRACE_MS) {
+      await CryptoTrade.update(trade.id, { status: 'open', pending_text: null, pending_at: null });
+      await notify(`ℹ️ ${coin(trade.pair)} satışı Gate.io'da bulunamadı; satış gerçekleşmemiş. Stop/hedef yeniden konuyor.`,
+        [[{ text: 'Sat', data: `ct:sell:${trade.id}` }]]);
+    }
+    return;
+  }
+  // Süreç satıştan önce/tetik sonrası çöktü: stoplara bak
+  const stops = await readStops(trade);
+  if (stops.unknown) return;
+  const fired = firedOf(stops);
+  if (fired) return settleFired(trade, fired, fired === stops.sl ? stops.tp : stops.sl);
+  // Satış olmamış: açık duruma dön (iptal edilmiş stoplar yeniden konur)
+  await CryptoTrade.update(trade.id, {
+    status: 'open',
+    sl_order_id: DEAD.includes(stops.sl.status) ? null : trade.sl_order_id,
+    tp_order_id: DEAD.includes(stops.tp.status) ? null : trade.tp_order_id,
+  });
+}
 
 async function monitorTrade(trade, prices) {
-  // Alım sırasında süreç çöktüyse: emir dolmuşsa korumaya al
+  // Alım sırasında süreç çöktüyse ya da cevap gelmediyse: emir dolmuşsa korumaya al
   if (trade.status === 'opening') {
     const startedAt = new Date(trade.opened_at || trade.proposed_at).getTime();
-    if (Date.now() - startedAt < OPENING_GRACE_MS) return;
+    // Emir kimliği biliniyorsa beklemeye gerek yok; bilinmiyorsa (cevap gelmedi) Gate'in işlemesi için biraz bekle
+    if (!trade.entry_order_id && Date.now() - startedAt < OPENING_GRACE_MS) return;
     const order = trade.entry_order_id
       ? await gp.getOrder(trade.pair, trade.entry_order_id)
       : await gp.findOrderByText(trade.pair, `t-bot${trade.id}`, Math.floor(startedAt / 1000) - 120);
     if (order && order.status === 'open') return; // hâlâ işleniyor
     if (order && order.filledBase > 0) {
-      await notify(`🔎 ${coin(trade.pair)} alımı bulundu (cevap gecikmişti); stop/hedef konuyor.`);
+      if (!trade.entry_order_id) await notify(`🔎 ${coin(trade.pair)} alımı bulundu (cevap gecikmişti); stop/hedef konuyor.`);
       return completeEntry(trade, order);
     }
     await CryptoTrade.update(trade.id, { status: 'fail', error: 'Alım emri bulunamadı (gerçekleşmedi)', closed_at: new Date() });
-    await notify(`ℹ️ ${coin(trade.pair)} alım emri Gate.io'da bulunamadı; alım gerçekleşmemiş.`);
+    await notify(`ℹ️ ${coin(trade.pair)} alım emri Gate.io'da dolmamış/bulunamadı; alım gerçekleşmemiş.`);
     return;
   }
-  if (trade.status === 'closing') {
-    // Satış yarıda kaldıysa kullanıcıya sor (bot kendiliğinden satmaz)
-    return alertOnce(`closing:${trade.id}`, `⚠️ ${coin(trade.pair)} satışı yarıda kaldı. Tekrar dene:`, [[{ text: 'Sat', data: `ct:sell:${trade.id}` }]]);
-  }
+  if (trade.status === 'closing') return reconcileClosing(trade);
 
-  // Borsadaki stop/hedef tetiklendi mi?
-  const stops = [{ reason: 'sl', id: trade.sl_order_id }, { reason: 'tp', id: trade.tp_order_id }];
-  for (const s of stops) s.info = s.id ? await gp.getStop(s.id).catch(() => null) : null;
-  const fired = stops.find((s) => s.info?.status === 'finish' && s.info.firedOrderId);
-  if (fired) {
-    if (!(await CryptoTrade.transition(trade.id, 'open', { status: 'closing' }))) return;
-    const other = stops.find((s) => s !== fired);
-    if (other.id) await gp.cancelStop(other.id).catch(() => {});
-    const order = await waitFilled(trade.pair, await gp.getOrder(trade.pair, fired.info.firedOrderId));
-    return settleSell(trade, fired.reason, order, Number(trade.amount));
-  }
+  // Borsadaki stop/hedef tetiklendi mi? Durum okunamadıysa bu tur hiçbir şeye dokunma
+  const stops = await readStops(trade);
+  if (stops.unknown) return;
+  const fired = firedOf(stops);
+  if (fired) return settleFired(trade, fired, fired === stops.sl ? stops.tp : stops.sl);
 
   const last = prices.get(trade.pair);
   // Coin hesaptan elle satılmışsa takibi bırak
@@ -590,25 +732,18 @@ async function monitorTrade(trade, prices) {
   const bal = (await gp.balances([base])).get(base);
   if (((bal?.available || 0) + (bal?.locked || 0)) < Number(trade.amount) * 0.5) {
     if (!(await CryptoTrade.transition(trade.id, 'open', { status: 'closing' }))) return;
-    await cancelStops(trade);
+    await retireStop(trade, trade.sl_order_id);
+    await retireStop(trade, trade.tp_order_id);
     return finalize(trade, 'external', { exitPrice: last, proceeds: Number(trade.amount) * (last || 0) });
   }
 
-  // Stop/hedef emri iptal edilmiş, başarısız ya da süresi dolmuşsa yeniden koy
-  const dead = (s) => s.id && (!s.info || ['cancelled', 'failed', 'expired'].includes(s.info.status));
+  // Stop/hedef emri kesin olarak yoksa (iptal, başarısız, süresi dolmuş) yeniden koy
   const fix = {};
-  if (dead(stops[0])) fix.sl_order_id = null;
-  if (dead(stops[1])) fix.tp_order_id = null;
-  if (Object.keys(fix).length || !trade.sl_order_id || !trade.tp_order_id) {
-    if (Object.keys(fix).length) await CryptoTrade.update(trade.id, fix);
-    if ((fix.sl_order_id === null || !trade.sl_order_id) && last && last <= Number(trade.sl_price)) {
-      await alertOnce(`belowsl:${trade.id}`,
-        `🚨 <b>${coin(trade.pair)}</b> fiyatı (${fmt(last)}) stop seviyesinin (${fmt(trade.sl_price)}) altında ve borsada stop emri yok.`,
-        [[{ text: '🚨 Sat', data: `ct:sell:${trade.id}` }]]);
-    } else {
-      await placeProtection({ ...trade, ...fix });
-    }
-  }
+  if (trade.sl_order_id && DEAD.includes(stops.sl.status)) fix.sl_order_id = null;
+  if (trade.tp_order_id && DEAD.includes(stops.tp.status)) fix.tp_order_id = null;
+  if (Object.keys(fix).length) await CryptoTrade.update(trade.id, fix);
+  const current = { ...trade, ...fix };
+  if (!current.sl_order_id || !current.tp_order_id) await placeProtection(current);
 
   // Süre doldu: sor (bot kendiliğinden satmaz)
   if (!trade.expiry_notified && Date.now() - new Date(trade.opened_at).getTime() > (await holdHours()) * 3_600_000) {
@@ -635,29 +770,32 @@ async function expireProposals() {
 
 async function monitor() {
   await expireProposals();
+  if (!(await keysSet())) return;
   const active = await CryptoTrade.findActive();
-  if (!active.length || !(await keysSet())) return;
+  const pending = await CryptoTrade.findPendingCancels();
+  if (!active.length && !pending.length) return;
   const tickers = await gate.fetchTickers().catch(() => []);
   const prices = new Map(tickers.map((t) => [t.currency_pair, Number(t.last)]));
   await withTraderLock(async () => {
+    await retryPendingCancels().catch((err) => console.error('Stop iptal tekrarı hatası:', err.message));
     for (const trade of await CryptoTrade.findActive()) {
       await monitorTrade(trade, prices).catch((err) => console.error(`Gerçek işlem #${trade.id} takip hatası:`, err.message));
     }
   });
 }
 
-// Telegram butonları: ct:buy:<id>, ct:skip:<id>, ct:sell:<id>, ct:keep:<id>
-telegram.onCallback('ct', async ([action, idText], query) => {
+// Telegram butonları: ct:buy:<id>, ct:skip:<id>, ct:sell:<id>, ct:keep:<id>. Sadece sahibi, özel sohbetten.
+async function onButton([action, idText], query) {
   const id = Number(idText);
   const messageId = query.message?.message_id;
   if (action === 'buy') {
     await telegram.clearButtons(messageId);
     try {
       const trade = await approve(id);
-      return `Alındı: ${coin(trade.pair)}`;
+      return trade.status === 'open' ? `Alındı: ${coin(trade.pair)}` : `İşleniyor: ${coin(trade.pair)}`;
     } catch (err) {
-      await notify(`⚠️ Öneri #${id} alınmadı: ${telegram.escapeHtml(short(err))}`);
-      return 'Alınmadı';
+      await notify(`⚠️ Öneri #${id}: ${telegram.escapeHtml(short(err))}`);
+      return err.status === 504 ? 'Belirsiz, kontrol ediliyor' : 'Alınmadı';
     }
   }
   if (action === 'skip') {
@@ -671,7 +809,9 @@ telegram.onCallback('ct', async ([action, idText], query) => {
       await sell(id);
       return 'Satıldı';
     } catch (err) {
-      await notify(`⚠️ #${id} satılamadı: ${telegram.escapeHtml(short(err))}`, [[{ text: 'Tekrar dene', data: `ct:sell:${id}` }]]);
+      // "Tekrar dene" sadece kesin red/stop okunamadı durumunda; belirsiz satışta takip uzlaştırır
+      const retry = /cevap vermedi/.test(err.message) ? undefined : [[{ text: 'Tekrar dene', data: `ct:sell:${id}` }]];
+      await notify(`⚠️ #${id} satış: ${telegram.escapeHtml(short(err))}`, retry);
       return 'Satılamadı';
     }
   }
@@ -680,10 +820,14 @@ telegram.onCallback('ct', async ([action, idText], query) => {
     return 'Tutuluyor; stop/hedef borsada';
   }
   return 'Bilinmeyen işlem';
-});
+}
 
+// Sadece ana uygulama çağırır (index.js). Cron script'i bu modülü yükler ama start etmez:
+// Telegram dinleme ve takip zamanlayıcısı ikinci bir süreçte açılmasın.
 function start() {
   if (monitorTimer) return;
+  started = true;
+  telegram.onCallback('ct', onButton, { ownerOnly: true });
   monitorTimer = setInterval(() => monitor().catch((err) => console.error('Gerçek işlem takibi hatası:', err.message)), MONITOR_MS);
   monitor().catch(() => {});
 }
@@ -735,5 +879,5 @@ async function status() {
 module.exports = {
   PROFILES, NEWS_MODES, OPPORTUNITY_MIN_VOLUME, start, status, saveConfig, propose, approve, reject, sell, closeAll,
   newsCheck, opportunityBases, refreshOpportunities, testConnection,
-  _monitor: monitor, // testler için
+  _monitor: monitor, _onButton: onButton, // testler için
 };

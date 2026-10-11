@@ -24,6 +24,12 @@ async function findProposed() {
   return rows.map(parse);
 }
 
+// İptali doğrulanamamış stop emirleri olan işlemler (kapanmış olsalar bile): takip iptali tekrar dener
+async function findPendingCancels() {
+  const [rows] = await db.query('SELECT * FROM crypto_trades WHERE pending_cancel IS NOT NULL ORDER BY id');
+  return rows.map(parse);
+}
+
 async function list(limit = 50) {
   const [rows] = await db.query('SELECT * FROM crypto_trades ORDER BY id DESC LIMIT ?', [limit]);
   return rows.map(parse);
@@ -65,4 +71,4 @@ async function stats() {
   };
 }
 
-module.exports = { create, findById, findActive, findProposed, list, update, transition, realizedSince, stats };
+module.exports = { create, findById, findActive, findProposed, findPendingCancels, list, update, transition, realizedSince, stats };
