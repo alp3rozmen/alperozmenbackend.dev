@@ -23,4 +23,13 @@ router.post('/tick', cronOrAuth, cryptoController.tick);
 router.post('/telegram/test', auth, cryptoController.telegramTest);
 router.get('/telegram/chats', auth, cryptoController.telegramChats);
 
+// Gerçek hesap (Gate.io): alım sadece onayla; satış sadece kullanıcı isteğiyle (stop/hedef borsada)
+router.get('/trading', auth, cryptoController.tradingStatus);
+router.post('/trading/config', auth, cryptoController.tradingConfig);
+router.post('/trading/test', auth, cryptoController.tradingTest);
+router.post('/trading/close-all', auth, cryptoController.tradingCloseAll);
+router.post('/trades/:id/approve', auth, cryptoController.tradeApprove);
+router.post('/trades/:id/reject', auth, cryptoController.tradeReject);
+router.post('/trades/:id/sell', auth, cryptoController.tradeSell);
+
 module.exports = router;

@@ -269,4 +269,4 @@ async function generateChannelIdea({ niche, brief, seconds, recentTitles }) {
   return JSON.parse(response.text);
 }
 
-module.exports = { generateIdeas, generateProductPlan, suggestNiches, generateChannelIdea };
+module.exports = { generateIdeas, generateProductPlan, suggestNiches, generateChannelIdea, client, generate };

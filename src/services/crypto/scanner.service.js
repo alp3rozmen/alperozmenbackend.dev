@@ -2,6 +2,7 @@ const gate = require('./gate.api');
 const binanceTr = require('./binancetr.api');
 const telegram = require('../telegram');
 const { evaluateBreakout, isMarketHealthy } = require('./strategy');
+const trader = require('./trader.service');
 const CryptoSignal = require('../../models/CryptoSignal');
 const { db } = require('../../config/db');
 
@@ -48,11 +49,13 @@ function buildSettings(saved = {}) {
     timeframe,
     binanceTrOnly: !!saved.binanceTrOnly,
     statusReports: !!saved.statusReports,
+    // Gerçek hesap ayarları trader.service'e ait; tarayıcı ayar kaydederken silinmesin diye aynen taşınır
+    trading: saved.trading,
   };
 }
 
 function savedPart(s) {
-  return { timeframe: s.timeframe, binanceTrOnly: s.binanceTrOnly, statusReports: s.statusReports };
+  return { timeframe: s.timeframe, binanceTrOnly: s.binanceTrOnly, statusReports: s.statusReports, trading: s.trading };
 }
 const LEVERAGED = /\d+[LS]_USDT$/;
 const EXCLUDED = new Set(['USDC', 'FDUSD', 'TUSD', 'DAI', 'USDE', 'USDD', 'PYUSD', 'EUR', 'EURC', 'USD1', 'PAXG', 'XAUT', 'WBTC', 'STETH']);
@@ -180,24 +183,50 @@ async function findNewSignals(tickers) {
   const allowedBases = settings.binanceTrOnly ? await binanceTr.fetchBaseAssets() : null;
   const candidates = pickCandidates(tickers, skipPairs, allowedBases);
 
-  const results = await mapLimit(candidates, 5, async (t) => {
+  // Haber fırsatı coinler: normal hacim eşiğinin altında da olsa taranır, hacim artışı şartı biraz gevşer
+  // (yine kırılım + trend + RSI şart; gerçek hesapta yarım pozisyon önerilir)
+  const opportunities = await trader.opportunityBases().catch(() => new Map());
+  const normal = new Set(candidates.map((t) => t.currency_pair));
+  const extra = tickers.filter((t) => {
+    const base = t.currency_pair.replace('_USDT', '');
+    return t.currency_pair.endsWith('_USDT') && opportunities.has(base) && !normal.has(t.currency_pair)
+      && !skipPairs.has(t.currency_pair) && !LEVERAGED.test(t.currency_pair) && !EXCLUDED.has(base)
+      && (!allowedBases || allowedBases.has(base))
+      && Number(t.quote_volume) >= trader.OPPORTUNITY_MIN_VOLUME && Number(t.change_percentage) < settings.maxChange24h;
+  });
+  const oppSettings = { ...settings, minVolumeRatio: 1.5 };
+
+  const results = await mapLimit([...candidates, ...extra], 5, async (t) => {
     const candles = (await gate.fetchCandles(t.currency_pair, settings.timeframe, 120)).filter((c) => c.closed);
     // Kırılım mumu yeni kapanmış olmalı; sunucu kapalıyken kaçan eski kırılımlara geç girme
     const lastClose = candles[candles.length - 1].time + TIMEFRAME_MS[settings.timeframe];
     if (Date.now() - lastClose > settings.intervalMin * 2 * 60_000) return null;
-    const hit = evaluateBreakout(candles, settings);
-    return hit ? { ticker: t, ...hit } : null;
+    const isOpportunity = !normal.has(t.currency_pair);
+    const hit = evaluateBreakout(candles, isOpportunity ? oppSettings : settings);
+    return hit ? { ticker: t, isOpportunity, ...hit } : null;
   });
 
   const opened = [];
   for (const r of results) {
     if (!r) continue;
+    const coinName = r.ticker.currency_pair.replace('_USDT', '');
+    // Gemini haber filtresi: hack, delist, büyük kilit açılması vb. varsa sinyal atlanır
+    const newsResult = await trader.newsCheck(r.ticker.currency_pair);
+    if (newsResult.avoid) {
+      await telegram.sendMessage(
+        `⛔ <b>${coinName}</b> teknik sinyal verdi ama haber nedeniyle atlandı:\n${telegram.escapeHtml(newsResult.reason || '')}`
+      ).catch(() => {});
+      continue;
+    }
+    const oppReason = r.isOpportunity ? opportunities.get(coinName) : null;
+    const newsNote = [oppReason && `Fırsat: ${oppReason}`, newsResult.reason && `Haber: ${newsResult.reason}`].filter(Boolean).join(' · ');
+
     const entry = Number(r.ticker.last);
     const sl = entry - settings.slAtr * r.atr;
     const tp = entry + settings.tpAtr * r.atr;
     const now = new Date();
 
-    await CryptoSignal.create({
+    const signalId = await CryptoSignal.create({
       pair: r.ticker.currency_pair,
       entry_price: entry,
       tp_price: tp,
@@ -220,8 +249,15 @@ async function findNewSignals(tickers) {
       `🎯 Hedef: ${fmt(tp)} (+${((tp / entry - 1) * 100).toFixed(2)}%)\n` +
       `🛑 Stop: ${fmt(sl)} (${((sl / entry - 1) * 100).toFixed(2)}%)\n` +
       `Hacim ${r.volumeRatio.toFixed(1)}x · RSI ${r.rsi.toFixed(0)} · 24s ${Number(r.ticker.change_percentage).toFixed(1)}%\n` +
+      (newsNote ? `📰 ${telegram.escapeHtml(newsNote)}\n` : '') +
       pairLink(r.ticker.currency_pair)
     ).catch((err) => console.error('Telegram hatası:', err.message));
+
+    // Gerçek hesap önerileri açıksa "Al / Geç" butonlu öneri gönderilir; alım sadece onayla yapılır
+    await trader.propose(
+      { id: signalId, pair: r.ticker.currency_pair, entry_price: entry, sl_price: sl, tp_price: tp },
+      { ticker: r.ticker, isOpportunity: r.isOpportunity, newsNote }
+    );
   }
 
   return { marketHealthy, candidates: candidates.length, signals: opened.length, opened };
@@ -292,6 +328,8 @@ function tick() {
     const started = Date.now();
     try {
       const tickers = await gate.fetchTickers();
+      // Haber fırsatı taraması 12 saatte bir; uzun sürdüğü için taramayı bekletmez
+      trader.refreshOpportunities(tickers).catch(() => {});
       const closed = await updateOpenSignals();
       const result = await findNewSignals(tickers);
 

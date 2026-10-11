@@ -16,6 +16,7 @@ app.listen(PORT, '0.0.0.0', () => {
 startDbConnection();
 startBot();
 cryptoScanner.resumeIfRunning();
+require('./services/crypto/trader.service').start();
 tiktokVideos.resume();
 tiktokRenders.resume();
 productVideos.resume();

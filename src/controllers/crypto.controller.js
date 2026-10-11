@@ -94,3 +94,92 @@ exports.telegramChats = async (req, res) => {
     res.status(500).json({ message: 'Telegram hatası', error: err.response?.data?.description || err.message });
   }
 };
+
+// --- Gerçek hesap (yarı otomatik: alımlar kullanıcı onayıyla) ---
+
+const trader = require('../services/crypto/trader.service');
+
+function tradingFail(res, err, message) {
+  console.error(message + ':', err.message);
+  res.status(err.status || 500).json({ message, error: String(err.message).slice(0, 500) });
+}
+
+exports.tradingStatus = async (req, res) => {
+  try {
+    res.json(await trader.status());
+  } catch (err) {
+    tradingFail(res, err, 'Gerçek hesap durumu alınamadı');
+  }
+};
+
+exports.tradingConfig = async (req, res) => {
+  const body = req.body || {};
+  const changes = {};
+  if (body.enabled !== undefined) {
+    if (typeof body.enabled !== 'boolean') return res.status(400).json({ message: 'enabled true/false olmalı' });
+    changes.enabled = body.enabled;
+  }
+  if (body.capitalUsdt !== undefined) {
+    const capital = Number(body.capitalUsdt);
+    if (!Number.isFinite(capital) || capital < 0) return res.status(400).json({ message: 'Sermaye geçerli bir sayı olmalı' });
+    changes.capitalUsdt = capital;
+  }
+  if (body.riskProfile !== undefined) {
+    if (!trader.PROFILES[body.riskProfile]) return res.status(400).json({ message: 'Geçersiz risk profili' });
+    changes.riskProfile = body.riskProfile;
+  }
+  if (body.newsMode !== undefined) {
+    if (!trader.NEWS_MODES.includes(body.newsMode)) return res.status(400).json({ message: 'Geçersiz haber modu' });
+    changes.newsMode = body.newsMode;
+  }
+  try {
+    res.json({ message: 'Kaydedildi', config: await trader.saveConfig(changes) });
+  } catch (err) {
+    tradingFail(res, err, 'Ayar kaydedilemedi');
+  }
+};
+
+exports.tradingTest = async (req, res) => {
+  try {
+    const { usdt } = await trader.testConnection();
+    res.json({ message: `Bağlantı çalışıyor. Kullanılabilir bakiye: ${usdt.toFixed(2)} USDT` });
+  } catch (err) {
+    tradingFail(res, err, 'Gate.io bağlantısı başarısız');
+  }
+};
+
+exports.tradeApprove = async (req, res) => {
+  try {
+    const trade = await trader.approve(Number(req.params.id));
+    res.json({ message: `Alındı: ${trade.pair.replace('_USDT', '')}`, trade });
+  } catch (err) {
+    tradingFail(res, err, 'Alınmadı');
+  }
+};
+
+exports.tradeReject = async (req, res) => {
+  try {
+    await trader.reject(Number(req.params.id));
+    res.json({ message: 'Öneri geçildi' });
+  } catch (err) {
+    tradingFail(res, err, 'Geçilemedi');
+  }
+};
+
+exports.tradeSell = async (req, res) => {
+  try {
+    await trader.sell(Number(req.params.id));
+    res.json({ message: 'Satıldı' });
+  } catch (err) {
+    tradingFail(res, err, 'Satılamadı');
+  }
+};
+
+exports.tradingCloseAll = async (req, res) => {
+  try {
+    const count = await trader.closeAll();
+    res.json({ message: `Öneriler kapatıldı, ${count} pozisyon satıldı` });
+  } catch (err) {
+    tradingFail(res, err, 'Tümü satılamadı');
+  }
+};

@@ -182,3 +182,50 @@ ALTER TABLE product_videos ADD COLUMN IF NOT EXISTS ig_account_id INT UNSIGNED N
 
 -- Ürün hesabı işareti (mevcut tabloya ek kolon; bir kez çalıştır)
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS is_product TINYINT(1) NOT NULL DEFAULT 0;
+
+-- Gate.io hesabında GERÇEK işlemler. Bot alım emrini sadece kullanıcı onaylayınca (Telegram/panel) verir;
+-- sadece kendi aldığı miktarı satar, hesaptaki diğer varlıklara dokunmaz.
+-- status: proposed (onay bekliyor) → opening (alım emri) → open (stop/hedef borsada) → closing → closed
+--         proposed → rejected (Geç) / expired (süresinde onaylanmadı); hata → fail
+CREATE TABLE IF NOT EXISTS crypto_trades (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  signal_id INT UNSIGNED NULL,
+  pair VARCHAR(40) NOT NULL,
+  status ENUM('proposed','rejected','expired','opening','open','closing','closed','fail') NOT NULL DEFAULT 'proposed',
+  is_opportunity TINYINT(1) NOT NULL DEFAULT 0,
+  quote_amount DECIMAL(30,8) NOT NULL,
+  signal_entry DECIMAL(30,12) NOT NULL,
+  signal_sl DECIMAL(30,12) NOT NULL,
+  signal_tp DECIMAL(30,12) NOT NULL,
+  entry_order_id VARCHAR(64) NULL,
+  amount DECIMAL(30,12) NULL,
+  entry_price DECIMAL(30,12) NULL,
+  cost_usdt DECIMAL(30,8) NULL,
+  sl_price DECIMAL(30,12) NULL,
+  tp_price DECIMAL(30,12) NULL,
+  sl_order_id VARCHAR(64) NULL,
+  tp_order_id VARCHAR(64) NULL,
+  exit_reason ENUM('tp','sl','expired','manual','external','emergency') NULL,
+  exit_order_id VARCHAR(64) NULL,
+  exit_price DECIMAL(30,12) NULL,
+  proceeds_usdt DECIMAL(30,8) NULL,
+  pnl_usdt DECIMAL(30,8) NULL,
+  pnl_pct DECIMAL(10,3) NULL,
+  news_note VARCHAR(500) NULL,
+  proposal_message_id BIGINT NULL,
+  expiry_notified TINYINT(1) NOT NULL DEFAULT 0,
+  error VARCHAR(500) NULL,
+  proposed_at DATETIME NOT NULL,
+  opened_at DATETIME NULL,
+  closed_at DATETIME NULL,
+  INDEX idx_status (status),
+  INDEX idx_closed (closed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Gemini'nin haberlere göre bulduğu fırsat coinleri; süreleri dolunca aday listesinden çıkar
+CREATE TABLE IF NOT EXISTS crypto_opportunities (
+  symbol VARCHAR(30) PRIMARY KEY,
+  reason VARCHAR(500) NOT NULL,
+  found_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
