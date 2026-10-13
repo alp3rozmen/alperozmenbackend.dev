@@ -128,6 +128,12 @@ exports.tradingConfig = async (req, res) => {
     if (!trader.PROFILES[body.riskProfile]) return res.status(400).json({ message: 'Geçersiz risk profili' });
     changes.riskProfile = body.riskProfile;
   }
+  if (body.allIn !== undefined) {
+    if (typeof body.allIn !== 'boolean') return res.status(400).json({ message: 'allIn true/false olmalı' });
+    // All-in'i yanlışlıkla açmamak için panel açık onay gönderir
+    if (body.allIn && body.confirmAllIn !== true) return res.status(400).json({ message: 'All-in için açık onay (confirmAllIn) gerekli' });
+    changes.allIn = body.allIn;
+  }
   if (body.newsMode !== undefined) {
     if (!trader.NEWS_MODES.includes(body.newsMode)) return res.status(400).json({ message: 'Geçersiz haber modu' });
     changes.newsMode = body.newsMode;

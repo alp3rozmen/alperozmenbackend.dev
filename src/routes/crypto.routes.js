@@ -14,6 +14,12 @@ async function cronOrAuth(req, res, next) {
   return auth(req, res, next);
 }
 
+// Panel durumu eski kalmasın (tarayıcı/proxy önbelleği): GET yanıtları önbelleğe alınmaz
+router.use((req, res, next) => {
+  if (req.method === 'GET') res.set('Cache-Control', 'no-store');
+  next();
+});
+
 router.get('/status', auth, cryptoController.status);
 router.get('/signals', auth, cryptoController.signals);
 router.post('/start', auth, cryptoController.start);

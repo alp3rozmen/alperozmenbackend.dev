@@ -24,6 +24,14 @@ async function findProposed() {
   return rows.map(parse);
 }
 
+// Kapanmış işlemlerde borsada hâlâ duruyor olabilecek stop/hedef emirleri (iptal edilemeyen/unutulan) için tarama
+async function findClosedWithStops(since) {
+  const [rows] = await db.query(
+    "SELECT * FROM crypto_trades WHERE status IN ('closed','fail') AND (sl_order_id IS NOT NULL OR tp_order_id IS NOT NULL) " +
+    'AND COALESCE(closed_at, proposed_at) >= ? ORDER BY id', [since]);
+  return rows.map(parse);
+}
+
 // İptali doğrulanamamış stop emirleri olan işlemler (kapanmış olsalar bile): takip iptali tekrar dener
 async function findPendingCancels() {
   const [rows] = await db.query('SELECT * FROM crypto_trades WHERE pending_cancel IS NOT NULL ORDER BY id');
@@ -71,4 +79,4 @@ async function stats() {
   };
 }
 
-module.exports = { create, findById, findActive, findProposed, findPendingCancels, list, update, transition, realizedSince, stats };
+module.exports = { create, findById, findActive, findProposed, findPendingCancels, findClosedWithStops, list, update, transition, realizedSince, stats };

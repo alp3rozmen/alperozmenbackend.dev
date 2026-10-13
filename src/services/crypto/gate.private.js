@@ -182,6 +182,7 @@ function normalizeOrder(o) {
     feeCurrency: o.fee_currency,
     gtFee: Number(o.gt_fee) || 0, // GT ile komisyon indirimi açıksa komisyon burada (GT cinsinden)
     text: o.text,
+    createTime: Number(o.create_time_ms) / 1000 || Number(o.create_time) || 0,
   };
 }
 
@@ -232,6 +233,12 @@ async function findOrderByText(pair, text, sinceSec) {
   const open = await request('GET', '/spot/orders', { query: { currency_pair: pair, status: 'open', limit: 100 } });
   const pending = open.find((o) => o.text === text);
   return pending ? normalizeOrder(pending) : null;
+}
+
+// Belirli bir zamandan beri tamamlanmış SATIŞ emirleri (tetiklenen emrin kimliğiyle sorgu çalışmazsa gerçek çıkışı bulmak için)
+async function findSellsSince(pair, sinceSec) {
+  const rows = await request('GET', '/spot/orders', { query: { currency_pair: pair, status: 'finished', limit: 100, from: sinceSec } });
+  return rows.filter((o) => o.side === 'sell').map(normalizeOrder).filter((o) => o.filledBase > 0);
 }
 
 // --- Tetikli emirler (stop / hedef); borsada durur, tetiklenince piyasa emri verir ---
@@ -286,7 +293,7 @@ async function findStop({ pair, rule, triggerPrice, amount }) {
 }
 
 module.exports = {
-  balances, pairInfo, marketBuy, marketSell, getOrder, findOrderByText, createStop, getStop, cancelStopConfirmed, findStop,
+  balances, pairInfo, marketBuy, marketSell, getOrder, findOrderByText, findSellsSince, createStop, getStop, cancelStopConfirmed, findStop,
   _sign: sign, _dec: dec,
   _resetAccountMode: () => { accountModeCheckedAt = 0; }, // testler için
 };
