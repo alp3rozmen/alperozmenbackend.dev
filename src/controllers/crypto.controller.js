@@ -194,6 +194,32 @@ exports.tradingCloseAll = async (req, res) => {
 
 const serverLog = require('../services/logger');
 
+exports.logSettings = async (req, res) => {
+  try {
+    res.json({ enabled: await serverLog.isEnabled() });
+  } catch (err) {
+    res.status(500).json({ message: 'Günlük ayarı alınamadı', error: err.message });
+  }
+};
+
+exports.updateLogSettings = async (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ message: 'enabled true/false olmalı' });
+  try {
+    res.json({ enabled: await serverLog.setEnabled(req.body.enabled) });
+  } catch (err) {
+    res.status(500).json({ message: 'Günlük ayarı kaydedilemedi', error: err.message });
+  }
+};
+
+exports.clearLogs = async (req, res) => {
+  try {
+    await serverLog.clear();
+    res.json({ message: 'Günlük temizlendi.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Günlük temizlenemedi', error: err.message });
+  }
+};
+
 exports.logs = async (req, res) => {
   try {
     const level = ['error', 'warn'].includes(req.query.level) ? req.query.level : 'all';

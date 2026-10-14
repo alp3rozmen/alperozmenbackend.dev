@@ -909,7 +909,11 @@ async function monitor() {
   await expireProposals();
   if (!(await keysSet())) return;
   const active = await CryptoTrade.findActive();
-  const pending = await CryptoTrade.findPendingCancels();
+  // Yardımcı liste okunamazsa açık işlemlerin takibi durmasın (stop/hedef dolumu, süre dolumu)
+  const pending = await CryptoTrade.findPendingCancels().catch((err) => {
+    console.error('İptal bekleyen stoplar okunamadı:', err.message);
+    return [];
+  });
   if (!active.length && !pending.length && Date.now() - lastSweep < SWEEP_MS) return;
   const tickers = await gate.fetchTickers().catch(() => []);
   const prices = new Map(tickers.map((t) => [t.currency_pair, Number(t.last)]));

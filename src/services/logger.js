@@ -6,6 +6,12 @@ const { db } = require('../config/db');
 const MAX_AGE_DAYS = 7;
 const MAX_ROWS = 5000;
 const DEDUPE_MS = 60_000;
+// Panelden kapatılabilir (app_settings.server_log_enabled = '0'); kapalıyken sadece konsola (passenger.log) yazılır.
+// Ayar Setting modeli yerine burada okunur: Setting'in hata mesajı tekrar günlüğe düşüp döngü kurmasın.
+const ENABLED_KEY = 'server_log_enabled';
+const ENABLED_CACHE_MS = 60_000;
+let enabled = true;
+let enabledAt = 0;
 
 let ready = null;
 let writes = 0;
@@ -40,8 +46,37 @@ async function prune() {
   );
 }
 
+async function isEnabled() {
+  if (Date.now() - enabledAt < ENABLED_CACHE_MS) return enabled;
+  enabledAt = Date.now();
+  try {
+    const [rows] = await db.query('SELECT `value` FROM app_settings WHERE `key` = ?', [ENABLED_KEY]);
+    enabled = rows[0]?.value !== '0';
+  } catch {
+    // okunamazsa son bilinen değerle devam
+  }
+  return enabled;
+}
+
+async function setEnabled(value) {
+  await db.query(
+    'INSERT INTO app_settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)',
+    [ENABLED_KEY, value ? '1' : '0']
+  );
+  enabled = !!value;
+  enabledAt = Date.now();
+  return enabled;
+}
+
+// Tüm kayıtları siler; TRUNCATE diskteki yeri de geri verir (yetki yoksa DELETE)
+async function clear() {
+  await ensureTable();
+  await db.query('TRUNCATE TABLE app_logs').catch(() => db.query('DELETE FROM app_logs'));
+}
+
 async function write(level, source, message) {
   try {
+    if (!(await isEnabled())) return;
     const text = String(message).replace(/\s+/g, ' ').slice(0, 1000);
     const now = Date.now();
     if (level !== 'info') {
@@ -98,4 +133,4 @@ async function read({ level = 'all', limit = 100 } = {}) {
   return rows;
 }
 
-module.exports = { info, warn, error, read, captureConsole };
+module.exports = { info, warn, error, read, captureConsole, isEnabled, setEnabled, clear };

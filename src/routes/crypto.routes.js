@@ -23,6 +23,9 @@ router.use((req, res, next) => {
 router.get('/status', auth, cryptoController.status);
 router.get('/signals', auth, cryptoController.signals);
 router.get('/logs', auth, cryptoController.logs);
+router.delete('/logs', auth, cryptoController.clearLogs);
+router.get('/logs/settings', auth, cryptoController.logSettings);
+router.post('/logs/settings', auth, cryptoController.updateLogSettings);
 router.post('/start', auth, cryptoController.start);
 router.post('/stop', auth, cryptoController.stop);
 router.post('/options', auth, cryptoController.options);

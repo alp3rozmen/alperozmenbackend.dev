@@ -177,6 +177,9 @@ CREATE TABLE IF NOT EXISTS channel_videos (
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Not: Var olan tablolara sonradan eklenen sütunları uygulama açılışta kendisi ekler (src/config/migrations.js);
+-- aşağıdaki ALTER satırları elle çalıştırmak istersen diye duruyor.
+
 -- Ürün videolarının paylaşılacağı hesap (mevcut tabloya ek kolon; bir kez çalıştır)
 ALTER TABLE product_videos ADD COLUMN IF NOT EXISTS ig_account_id INT UNSIGNED NULL;
 

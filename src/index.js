@@ -3,6 +3,7 @@ const log = require('./services/logger');
 log.captureConsole(); // mevcut console.error/warn çağrıları da panel günlüğüne düşsün
 const app = require('./app');
 const { startDbConnection } = require('./config/db');
+const migrations = require('./config/migrations');
 const { startBot } = require('./bots/telebot');
 const cryptoScanner = require('./services/crypto/scanner.service');
 const tiktokVideos = require('./services/tiktok/video.service');
@@ -24,10 +25,15 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 startDbConnection();
-startBot();
-cryptoScanner.resumeIfRunning();
-require('./services/crypto/trader.service').start();
-tiktokVideos.resume();
-tiktokRenders.resume();
-productVideos.resume();
-channels.resume();
+// Servisler eksik sütunlar eklendikten sonra başlasın; yoksa eski tablodaki yeni sütunu sorgulayıp hata verirler
+migrations.run()
+    .catch((err) => log.error('sunucu', `Veritabanı sütun kontrolü başarısız: ${err.message}`))
+    .finally(() => {
+        startBot();
+        cryptoScanner.resumeIfRunning();
+        require('./services/crypto/trader.service').start();
+        tiktokVideos.resume();
+        tiktokRenders.resume();
+        productVideos.resume();
+        channels.resume();
+    });
