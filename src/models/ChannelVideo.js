@@ -37,9 +37,10 @@ async function findByStatus(status) {
 }
 
 // Gemini'ye "bunları tekrar etme" diye verilir
-async function recentTitles(accountId, limit = 30) {
+// Son fikirler (yeniden eskiye): tekrarı önlemek için başlık, format ve mekân Gemini'ye verilir
+async function recentIdeas(accountId, limit = 30) {
   const [rows] = await db.query('SELECT idea FROM channel_videos WHERE account_id = ? AND idea IS NOT NULL ORDER BY id DESC LIMIT ?', [accountId, limit]);
-  return rows.map((r) => JSON.parse(r.idea).title).filter(Boolean);
+  return rows.map((r) => JSON.parse(r.idea)).filter((idea) => idea?.title);
 }
 
 async function update(id, fields) {
@@ -72,5 +73,5 @@ async function findExpiredFiles(before) {
 }
 
 module.exports = {
-  createForSlot, findById, list, findByStatus, recentTitles, update, transition, remove, removeByAccount, creditsSince, findExpiredFiles,
+  createForSlot, findById, list, findByStatus, recentIdeas, update, transition, remove, removeByAccount, creditsSince, findExpiredFiles,
 };

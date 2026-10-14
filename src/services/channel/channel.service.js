@@ -87,7 +87,7 @@ async function generate(account, slot) {
       brief: account.niche_brief,
       seconds: account.video_seconds,
       comedy: account.comedy,
-      recentTitles: await ChannelVideo.recentTitles(account.id),
+      recent: await ChannelVideo.recentIdeas(account.id),
     });
     await ChannelVideo.update(id, { idea });
     const taskId = await kie.createTask(MODEL, {

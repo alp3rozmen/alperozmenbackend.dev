@@ -188,6 +188,9 @@ ALTER TABLE product_videos ADD COLUMN IF NOT EXISTS ig_account_id INT UNSIGNED N
 -- Ürün hesabı işareti (mevcut tabloya ek kolon; bir kez çalıştır)
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS is_product TINYINT(1) NOT NULL DEFAULT 0;
 
+-- Konuşmalı komedi modu (mevcut tabloya ek kolon; bir kez çalıştır)
+ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS comedy TINYINT(1) NOT NULL DEFAULT 0;
+
 -- Gate.io hesabında GERÇEK işlemler. Bot alım emrini sadece kullanıcı onaylayınca (Telegram/panel) verir;
 -- sadece kendi aldığı miktarı satar, hesaptaki diğer varlıklara dokunmaz.
 -- status: proposed (onay bekliyor) → opening (alım emri) → open (stop/hedef borsada) → closing → closed

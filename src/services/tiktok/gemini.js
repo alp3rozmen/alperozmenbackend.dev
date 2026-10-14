@@ -254,16 +254,43 @@ const CHANNEL_IDEA_SCHEMA = {
     hookText: { type: 'string', description: 'Videonun ilk 2-3 saniyesindeki Türkçe ekran yazısı, en fazla 6 kelime' },
     caption: { type: 'string', description: 'Instagram açıklaması, Türkçe, 1-2 kısa cümle + takip etmeye çağrı' },
     hashtags: { type: 'array', items: { type: 'string' }, description: '8-12 hashtag, # ile; nişin temel etiketleri + bu videoya özel' },
+    setting: { type: 'string', description: 'Mekân ve karakterlerin 3-6 kelimelik Türkçe özeti (sonraki videolarda tekrarı önlemek için kaydedilir)' },
   },
-  required: ['title', 'prompt', 'hookText', 'caption', 'hashtags'],
+  required: ['title', 'prompt', 'hookText', 'caption', 'hashtags', 'setting'],
 };
 
+// Komedi videolarında her seferinde farklı bir kalıp; aynı "iki karakter atışıyor" sahnesi tekrar etmesin
+const COMEDY_FORMATS = [
+  'İki karakter atışması: biri dert yanar, diğeri laf sokar',
+  'Tek karakter kameraya bakıp dert yanıyor (vlog / itiraf)',
+  'Sokak röportajı parodisi: muhabir mikrofonu uzatır, karakter patlar',
+  'Son dakika haber bülteni parodisi: ciddi spiker, saçma haber',
+  'Doğa belgeseli parodisi: ciddi anlatıcı sesi karakteri bir hayvan gibi anlatır',
+  'Müşteri hizmetleri / destek hattı telefon konuşması',
+  'İş toplantısı veya sabah daily toplantısı',
+  'Oyun lobisinde sesli sohbette takım içi kavga',
+  'Terapi seansı: karakter psikoloğa dert anlatır',
+  'Reklam / tele-alışveriş parodisi: abartılı satıcı',
+  'Epik film sahnesi parodisi: ağır çekim, dramatik müzik, saçma sebep',
+  'Ders / eğitim videosu parodisi: hoca karakter yanlış şeyi öğretir',
+];
+const FORMAT_MEMORY = 3; // son kaç videonun formatı tekrar seçilmez
+
+function pickFormat(recent) {
+  const used = new Set(recent.slice(0, FORMAT_MEMORY).map((idea) => idea.format));
+  const pool = COMEDY_FORMATS.filter((f) => !used.has(f));
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // Bir kanal için yeni video fikri; son başlıklar verilerek tekrar engellenir
-// comedy: karakterler Türkçe konuşur (Grok prompt'taki diyaloğu seslendirir), argo/küfür serbest
-async function generateChannelIdea({ niche, brief, seconds, recentTitles, comedy = false }) {
+// comedy: karakterler Türkçe konuşur (Grok prompt'taki diyaloğu seslendirir), argo/küfür serbest.
+// recent: son fikirler (yeniden eskiye); başlık, format ve mekân tekrarını önlemek için.
+async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy = false }) {
   const ai = await client();
   const model = await Setting.get('gemini_text_model');
   const style = brief?.visualStyle ? `Kanalın sabit görsel stili (prompt'a dahil et): ${brief.visualStyle}\n` : '';
+  const format = comedy ? pickFormat(recent) : null;
+  const history = recent.map((idea) => [idea.title, idea.format, idea.setting].filter(Boolean).join(' / '));
 
   const response = await generate(ai, {
     model,
@@ -272,15 +299,17 @@ async function generateChannelIdea({ niche, brief, seconds, recentTitles, comedy
       (brief?.examples?.length ? `Örnek fikirler: ${brief.examples.join(' | ')}\n` : '') +
       style +
       (brief?.hashtags?.length ? `Nişin temel hashtag'leri: ${brief.hashtags.join(' ')}\n` : '') +
-      (recentTitles.length ? `Daha önce yapılanlar (bunları ve benzerlerini TEKRAR ETME): ${recentTitles.join(' | ')}\n` : '') +
+      (history.length
+        ? `Daha önce yapılanlar (başlık / format / mekân; konuyu, mekânı ve karakterleri TEKRAR ETME): ${history.join(' | ')}\n`
+        : '') +
       `\nBu kanal için ${seconds} saniyelik tek bir viral yapay zeka videosu fikri üret.\n` +
       'Kurallar:\n' +
       (comedy
-        ? '- Konuşmalı komedi skeci: Instagram\'daki konuşan böcek/hayvan/nesne videoları gibi, 3D animasyon (Pixar benzeri) ' +
-          'karakterler gündelik bir dertten yakınır, birbirine laf sokar, sonda güldüren bir punchline gelir.\n' +
-          '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun. ' +
-          'Örnek: The grumpy ant shouts in Turkish: "Lan yine mi şeker bitti!" The lazy beetle replies in Turkish: "Oha, bana ne kardeşim!" ' +
-          'Ses tonlarını tarif et (cırtlak, kalın, sinirli, bıkkın).\n' +
+        ? `- Konuşmalı komedi skeci. Bu videonun formatı: ${format}. Sonda güldüren bir punchline olsun.\n` +
+          '- Mekânı, karakterleri (sayısı, türü, görünüşü), kamera açısını ve ışığı önceki videolardan belirgin şekilde FARKLI seç; ' +
+          'görsel stil nişte ya da kanal stilinde verilmediyse bu fikre en uygun animasyon tarzını kendin seç.\n' +
+          '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun ' +
+          '(biçim: <karakter> says in Turkish: "<replik>"). Her karakterin ses tonunu tarif et.\n' +
           `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
           '- Sokak dili, argo ve küfür serbest; komik ve abartılı olsun. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret, ' +
           'gerçek kişi ve marka YOK.\n' +
@@ -292,7 +321,8 @@ async function generateChannelIdea({ niche, brief, seconds, recentTitles, comedy
       '- hookText ve açıklama Türkçe, doğal ve merak uyandıran.',
     config: { responseMimeType: 'application/json', responseJsonSchema: CHANNEL_IDEA_SCHEMA },
   });
-  return JSON.parse(response.text);
+  const idea = JSON.parse(response.text);
+  return format ? { ...idea, format } : idea;
 }
 
 module.exports = { generateIdeas, generateProductPlan, suggestNiches, generateChannelIdea, client, generate };
