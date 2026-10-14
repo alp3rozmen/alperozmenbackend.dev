@@ -8,6 +8,7 @@ const log = require('../services/logger');
 const COLUMNS = [
   ['product_videos', 'ig_account_id', 'INT UNSIGNED NULL'],
   ['ig_accounts', 'is_product', 'TINYINT(1) NOT NULL DEFAULT 0'],
+  ['ig_accounts', 'comedy', 'TINYINT(1) NOT NULL DEFAULT 0'],
   ['crypto_trades', 'pending_text', 'VARCHAR(40) NULL'],
   ['crypto_trades', 'pending_at', 'DATETIME NULL'],
   ['crypto_trades', 'pending_cancel', 'VARCHAR(500) NULL'],

@@ -1,9 +1,11 @@
 const crypto = require('crypto');
 const { db } = require('../config/db');
+const { PRODUCT_MODELS, DEFAULT_PRODUCT_MODEL } = require('../services/tiktok/productModels');
 
 // Panelden düzenlenebilen ayarlar. `env`: DB'de değer yoksa kullanılacak ortam değişkenleri.
 // `default`: ne DB'de ne .env'de değer yoksa kullanılır. `secret`: panelde tam değeri gösterilmez.
 // `encrypt`: DB'ye AES-256-GCM ile şifreli yazılır (borsa anahtarları; DB sızsa bile kullanılamasın).
+// `options`: panelde açılır liste; sadece bu değerler kaydedilebilir.
 const DEFINITIONS = {
   crypto_tg_bot_token: { env: ['CRYPTO_TG_BOT_TOKEN', 'BOT_TOKEN_CRYPTO'], secret: true },
   crypto_tg_chat_id: { env: ['CRYPTO_TG_CHAT_ID'], secret: false },
@@ -11,7 +13,10 @@ const DEFINITIONS = {
   gemini_api_key: { env: ['GEMINI_API'], secret: true },
   gemini_text_model: { env: [], secret: false, default: 'gemini-2.5-flash' },
   kie_api_key: { env: ['KIE_API_KEY'], secret: true },
-  kie_video_model: { env: [], secret: false, default: 'grok-imagine/text-to-video' },
+  kie_product_model: {
+    env: [], secret: false, default: DEFAULT_PRODUCT_MODEL,
+    options: Object.entries(PRODUCT_MODELS).map(([value, m]) => ({ value, label: m.label })),
+  },
   kie_monthly_credit_limit: { env: [], secret: false, default: '1000' },
   brand_name: { env: [], secret: false, default: 'ALREY 3D' },
   // Gate.io API v4; sadece spot işlem izni, para çekme izni KAPALI olmalı
@@ -93,6 +98,7 @@ async function listForPanel() {
       isSet: !!value,
       fromEnv: !value && !!envValue(key),
       default: def.default || null,
+      options: def.options || null,
     };
   });
 }
@@ -102,6 +108,9 @@ async function setMany(values) {
   for (const [key, raw] of Object.entries(values)) {
     if (!DEFINITIONS[key] || raw === undefined || raw === null) continue;
     const value = String(raw).trim();
+    if (value && DEFINITIONS[key].options && !DEFINITIONS[key].options.some((o) => o.value === value)) {
+      throw Object.assign(new Error(`${key} için geçersiz değer: ${value}`), { status: 400 });
+    }
     if (value === '') {
       await db.query('DELETE FROM app_settings WHERE `key` = ?', [key]);
     } else {

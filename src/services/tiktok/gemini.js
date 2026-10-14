@@ -143,7 +143,8 @@ const PLAN_SCHEMA = {
 
 // Fotoğraftan otomatik ürün videosu için 3 sahnelik senaryo. Prompt'lar Grok image-to-video'ya gider;
 // @image1 ön fotoğraf, varsa @image2 arka fotoğraftır.
-async function generateProductPlan({ productName, notes, photos }) {
+// multiImage=false: model tek fotoğrafı ilk kare olarak alır (@image referansı anlamaz)
+async function generateProductPlan({ productName, notes, photos, multiImage = true }) {
   const ai = await client();
   const model = await Setting.get('gemini_text_model');
   const brand = await Setting.get('brand_name');
@@ -164,7 +165,10 @@ async function generateProductPlan({ productName, notes, photos }) {
           '1. Hero: temiz stüdyo zemininde ürün yavaşça döner (turntable) veya kamera etrafında yörüngede döner, tüm yüzlerini gösterir.\n' +
           '2. Detay: makro yakın çekim, yavaş kamera kayması; katman dokusu, kenarlar, renk.\n' +
           '3. Kullanım: ürün gerçek kullanım ortamında (fotoğrafa ve ürüne uygun: masa, oyun düzeni, raf vb.), doğal ışık.\n' +
-          `prompt kuralları (İngilizce): her prompt "@image1 " ile başlasın. ${refs} ` +
+          (multiImage
+            ? `prompt kuralları (İngilizce): her prompt "@image1 " ile başlasın. ${refs} `
+            : 'prompt kuralları (İngilizce): video, verilen ön fotoğraftan (ilk kare) başlar; prompt\'ta @image gibi referans kullanma, ' +
+              'fotoğraftaki sahneden başlayan hareketi ve kamerayı tarif et. ') +
           'The product must stay exactly like the photos: same shape, proportions, colors and details; do not add or change parts. ' +
           'No text, letters, logos or watermarks in the video. No people faces; hands only if natural. ' +
           'Describe camera movement, lighting and background clearly. Audio: soft ambient sound only, no speech, no voiceover, no singing.\n' +
@@ -176,11 +180,12 @@ async function generateProductPlan({ productName, notes, photos }) {
 
   const plan = JSON.parse(response.text);
   if (!Array.isArray(plan.scenes) || plan.scenes.length < 3) throw new Error('Gemini 3 sahne üretmedi, tekrar dene.');
-  plan.scenes = plan.scenes.slice(0, 3).map((scene) => ({
-    ...scene,
-    // Model bazen referansı unutuyor; ürünün fotoğraftan alınması için şart
-    prompt: scene.prompt.trim().startsWith('@image1') ? scene.prompt.trim() : `@image1 ${scene.prompt.trim()}`,
-  }));
+  plan.scenes = plan.scenes.slice(0, 3).map((scene) => {
+    const prompt = scene.prompt.trim();
+    // Grok: model bazen referansı unutuyor, ürünün fotoğraftan alınması için şart. Diğerleri @image'i metin sanır.
+    if (!multiImage) return { ...scene, prompt: prompt.replace(/@image\d+\s*/g, '').trim() };
+    return { ...scene, prompt: prompt.startsWith('@image1') ? prompt : `@image1 ${prompt}` };
+  });
   return plan;
 }
 
@@ -254,7 +259,8 @@ const CHANNEL_IDEA_SCHEMA = {
 };
 
 // Bir kanal için yeni video fikri; son başlıklar verilerek tekrar engellenir
-async function generateChannelIdea({ niche, brief, seconds, recentTitles }) {
+// comedy: karakterler Türkçe konuşur (Grok prompt'taki diyaloğu seslendirir), argo/küfür serbest
+async function generateChannelIdea({ niche, brief, seconds, recentTitles, comedy = false }) {
   const ai = await client();
   const model = await Setting.get('gemini_text_model');
   const style = brief?.visualStyle ? `Kanalın sabit görsel stili (prompt'a dahil et): ${brief.visualStyle}\n` : '';
@@ -269,10 +275,20 @@ async function generateChannelIdea({ niche, brief, seconds, recentTitles }) {
       (recentTitles.length ? `Daha önce yapılanlar (bunları ve benzerlerini TEKRAR ETME): ${recentTitles.join(' | ')}\n` : '') +
       `\nBu kanal için ${seconds} saniyelik tek bir viral yapay zeka videosu fikri üret.\n` +
       'Kurallar:\n' +
-      '- İlk saniyede dikkat çeken, sonunda küçük bir sürpriz/espri olan, tekrar izletecek bir an.\n' +
-      '- prompt İngilizce; tek sahne, dikey 9:16, sinematik; ne olduğunu, kamerayı, ışığı ve sesleri (efekt/müzik) tarif et. ' +
-      'No speech, no dialogue, no voiceover. No text, letters, subtitles, logos or watermarks in the video. ' +
-      'No real people, celebrities, brands or copyrighted characters.\n' +
+      (comedy
+        ? '- Konuşmalı komedi skeci: Instagram\'daki konuşan böcek/hayvan/nesne videoları gibi, 3D animasyon (Pixar benzeri) ' +
+          'karakterler gündelik bir dertten yakınır, birbirine laf sokar, sonda güldüren bir punchline gelir.\n' +
+          '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun. ' +
+          'Örnek: The grumpy ant shouts in Turkish: "Lan yine mi şeker bitti!" The lazy beetle replies in Turkish: "Oha, bana ne kardeşim!" ' +
+          'Ses tonlarını tarif et (cırtlak, kalın, sinirli, bıkkın).\n' +
+          `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
+          '- Sokak dili, argo ve küfür serbest; komik ve abartılı olsun. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret, ' +
+          'gerçek kişi ve marka YOK.\n' +
+          '- No text, letters, subtitles, logos or watermarks in the video. Tek sahne, dikey 9:16.\n'
+        : '- İlk saniyede dikkat çeken, sonunda küçük bir sürpriz/espri olan, tekrar izletecek bir an.\n' +
+          '- prompt İngilizce; tek sahne, dikey 9:16, sinematik; ne olduğunu, kamerayı, ışığı ve sesleri (efekt/müzik) tarif et. ' +
+          'No speech, no dialogue, no voiceover. No text, letters, subtitles, logos or watermarks in the video. ' +
+          'No real people, celebrities, brands or copyrighted characters.\n') +
       '- hookText ve açıklama Türkçe, doğal ve merak uyandıran.',
     config: { responseMimeType: 'application/json', responseJsonSchema: CHANNEL_IDEA_SCHEMA },
   });

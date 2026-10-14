@@ -13,6 +13,6 @@ exports.update = async (req, res) => {
     await Setting.setMany(req.body || {});
     res.json({ message: 'Ayarlar kaydedildi.', settings: await Setting.listForPanel() });
   } catch (err) {
-    res.status(500).json({ message: 'Ayarlar kaydedilemedi.' });
+    res.status(err.status || 500).json({ message: 'Ayarlar kaydedilemedi.', error: err.status ? err.message : undefined });
   }
 };

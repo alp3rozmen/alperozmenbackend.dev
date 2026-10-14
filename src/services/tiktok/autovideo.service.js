@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const axios = require('axios');
 const kie = require('./kie.api');
+const { productModel } = require('./productModels');
 const gemini = require('./gemini');
 const ffmpeg = require('./ffmpeg');
 const telegram = require('../telegram');
@@ -11,14 +12,13 @@ const IgAccount = require('../../models/IgAccount');
 const renderService = require('./render.service');
 const videoService = require('./video.service');
 const { buildCaption } = require('./caption');
+const Setting = require('../../models/Setting');
 const ProductVideo = require('../../models/ProductVideo');
 
 // Fotoğraf → Gemini senaryosu → 3 Grok sahnesi → ffmpeg ile birleştirme + Türkçe yazılar → Telegram (+ Instagram)
-const MODEL = 'grok-imagine/image-to-video'; // 7'ye kadar referans fotoğraf alır (@image1, @image2)
 const SCENE_SECONDS = 6;
 // Ekonomik: sadece 1. sahne (dönen tanıtım) AI, diğerleri fotoğraftan ücretsiz (~1/3 kredi). Standart: 3 AI sahne.
 const QUALITIES = ['economy', 'standard'];
-const RESOLUTION = '720p';
 const HOOK_SECONDS = 2.5;
 const POLL_MS = 20_000;
 const PENDING_TIMEOUT_MS = 30 * 60_000;
@@ -70,7 +70,9 @@ async function prepare(id, { productName, notes, photos, quality }) {
     if (quality === 'economy') await fs.promises.writeFile(filePath(photoName(id, i)), photo.buffer);
     urls.push(await kie.uploadImage(photo.buffer, photo.mimetype, `product-${id}-${i + 1}.jpg`));
   }
-  const plan = await gemini.generateProductPlan({ productName, notes, photos });
+  // Model Ayarlar'dan seçilir; tek fotoğraf alan modellerde senaryo @image referanssız yazılır
+  const model = productModel(await Setting.get('kie_product_model'));
+  const plan = await gemini.generateProductPlan({ productName, notes, photos, multiImage: model.multiImage });
   await ProductVideo.update(id, { photos: urls, plan });
 
   const scenes = [];
@@ -82,15 +84,8 @@ async function prepare(id, { productName, notes, photos, quality }) {
         scenes.push({ kind: 'photo', state: 'success', file: photoName(id, photo), effect: i === 1 ? 'in' : 'out' });
         continue;
       }
-      const taskId = await kie.createTask(MODEL, {
-        image_urls: urls,
-        prompt: scene.prompt,
-        duration: String(SCENE_SECONDS),
-        resolution: RESOLUTION,
-        aspect_ratio: '9:16',
-        mode: 'normal',
-      });
-      scenes.push({ kind: 'ai', taskId, state: 'pending' });
+      const taskId = await kie.createTask(model.name, model.build({ prompt: scene.prompt, imageUrls: urls }));
+      scenes.push({ kind: 'ai', model: model.name, taskId, state: 'pending' });
     }
   } finally {
     // Başlatılabilen sahneler kaydedilsin; kredileri sonra hesaba katılır

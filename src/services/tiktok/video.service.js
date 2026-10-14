@@ -144,7 +144,7 @@ async function start({ ideaId, ideaIndex, prompt, duration, resolution }) {
     throw err;
   }
 
-  const model = await Setting.get('kie_video_model');
+  const model = 'grok-imagine/text-to-video';
   const id = await TiktokVideo.create({
     idea_id: ideaId || null,
     idea_index: Number.isInteger(ideaIndex) ? ideaIndex : null,

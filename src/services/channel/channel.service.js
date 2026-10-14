@@ -86,6 +86,7 @@ async function generate(account, slot) {
       niche: account.niche,
       brief: account.niche_brief,
       seconds: account.video_seconds,
+      comedy: account.comedy,
       recentTitles: await ChannelVideo.recentTitles(account.id),
     });
     await ChannelVideo.update(id, { idea });
@@ -94,7 +95,8 @@ async function generate(account, slot) {
       aspect_ratio: '9:16',
       duration: account.video_seconds,
       resolution: RESOLUTION,
-      mode: 'normal',
+      // fun: daha yaratıcı/oyunbaz hareket; komedi videoları için
+      mode: account.comedy ? 'fun' : 'normal',
     });
     await ChannelVideo.update(id, { kie_task_id: taskId });
     ensurePoller();
@@ -322,6 +324,7 @@ async function updateAccount(id, fields) {
     out.video_seconds = seconds;
   }
   if (fields.active !== undefined) out.active = !!fields.active;
+  if (fields.comedy !== undefined) out.comedy = !!fields.comedy;
   // Ürün hesabı niş otomasyonuna girmez; işaretlenince otomatik üretim kapanır
   if (fields.isProduct !== undefined) {
     out.is_product = !!fields.isProduct;

@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS ig_accounts (
   active TINYINT(1) NOT NULL DEFAULT 0,
   -- Ürün hesabı: sadece ürün videoları paylaşılır; niş kanalları ekranına ve otomatik üretime girmez
   is_product TINYINT(1) NOT NULL DEFAULT 0,
+  -- Konuşmalı komedi: karakterler Türkçe konuşur, argo/küfür serbest (Grok "fun" modu)
+  comedy TINYINT(1) NOT NULL DEFAULT 0,
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
