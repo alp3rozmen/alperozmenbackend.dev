@@ -3,6 +3,7 @@ const binanceTr = require('./binancetr.api');
 const telegram = require('../telegram');
 const { evaluateBreakout, isMarketHealthy } = require('./strategy');
 const trader = require('./trader.service');
+const log = require('../logger');
 const CryptoSignal = require('../../models/CryptoSignal');
 const { db } = require('../../config/db');
 
@@ -264,19 +265,41 @@ async function findNewSignals(tickers) {
 }
 
 // Uygulama ve cron script'i aynı anda çalışmasın (aynı sinyal/kapanış iki kez yazılmasın)
-async function withLock(fn) {
-  if (inFlight) return { skipped: true };
+// Bir tarama/takip turu bundan uzun sürerse zorla bırakılır; yoksa tek bir takılan istek bütün sonraki taramaları
+// "önceki işlem sürüyor" diye sessizce atlatırdı.
+const MAX_FLIGHT_MS = Number(process.env.CRYPTO_MAX_FLIGHT_MS) || 10 * 60_000; // env: sadece test için
+let flightStartedAt = 0;
+
+async function withLock(fn, label = 'tarama') {
+  if (inFlight) {
+    log.warn('kripto', `${label} atlandı: önceki işlem hâlâ sürüyor (${Math.round((Date.now() - flightStartedAt) / 1000)} sn)`);
+    return { skipped: true };
+  }
   inFlight = true;
+  flightStartedAt = Date.now();
   let conn;
+  let timer;
   try {
     conn = await db.getConnection();
     const [[lock]] = await conn.query("SELECT GET_LOCK('crypto_tick', 0) AS ok");
-    if (!lock.ok) return { skipped: true };
+    if (!lock.ok) {
+      log.warn('kripto', `${label} atlandı: başka bir süreç tarama kilidini tutuyor`);
+      return { skipped: true };
+    }
     try {
-      return await fn();
+      const work = fn();
+      work.catch(() => {}); // zaman aşımından sonra biten işin hatası "yakalanmamış" sayılmasın
+      const limit = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} ${Math.round(MAX_FLIGHT_MS / 1000)} sn içinde bitmedi, zorla bırakıldı (takılan bir istek olabilir)`)), MAX_FLIGHT_MS);
+      });
+      return await Promise.race([work, limit]);
     } finally {
+      clearTimeout(timer);
       await conn.query("SELECT RELEASE_LOCK('crypto_tick')").catch(() => {});
     }
+  } catch (err) {
+    log.error('kripto', `${label} hatası: ${err.message}`);
+    throw err;
   } finally {
     conn?.release();
     inFlight = false;
@@ -338,7 +361,7 @@ function tick() {
       const summary = result.waiting ? 'mum kapanışı bekleniyor'
         : result.marketHealthy === false ? 'BTC zayıf, sinyal aranmadı'
         : `${result.candidates} coin tarandı, ${result.signals} sinyal${result.opened?.length ? ` (${result.opened.join(', ')})` : ''}`;
-      console.log(`[kripto] ${lastScan.at.toISOString()} ${settings.timeframe} tarama: ${summary} · ${lastScan.durationMs}ms`);
+      log.info('kripto', `${settings.timeframe} tarama: ${summary} · ${lastScan.durationMs}ms`);
       await CryptoSignal.saveState({ last_scan_at: lastScan.at, last_error: null });
       if (settings.statusReports) await sendStatusReport(lastScan, closed, tickers);
       return lastScan;
@@ -356,7 +379,7 @@ function tick() {
 
 // Tarayıcı durdurulmuş olsa da açık pozisyonlar hedef/stop/süre için takip edilmeye devam eder
 function trackPositions() {
-  return withLock(() => updateOpenSignals());
+  return withLock(() => updateOpenSignals(), 'pozisyon takibi');
 }
 
 function startMonitor() {

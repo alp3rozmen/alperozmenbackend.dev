@@ -232,3 +232,14 @@ CREATE TABLE IF NOT EXISTS crypto_opportunities (
   found_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Kalıcı sunucu günlüğü (uygulama ilk çalışınca kendisi de oluşturur; 7 gün / 5000 satır tutulur)
+CREATE TABLE IF NOT EXISTS app_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  level ENUM('info','warn','error') NOT NULL,
+  source VARCHAR(40) NOT NULL,
+  message VARCHAR(1000) NOT NULL,
+  createdAt DATETIME NOT NULL,
+  INDEX idx_created (createdAt),
+  INDEX idx_level (level, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -189,3 +189,16 @@ exports.tradingCloseAll = async (req, res) => {
     tradingFail(res, err, 'Tümü satılamadı');
   }
 };
+
+// --- Sunucu günlüğü (paneldeki "Sunucu günlüğü" bölümü) ---
+
+const serverLog = require('../services/logger');
+
+exports.logs = async (req, res) => {
+  try {
+    const level = ['error', 'warn'].includes(req.query.level) ? req.query.level : 'all';
+    res.json(await serverLog.read({ level, limit: Number(req.query.limit) || 100 }));
+  } catch (err) {
+    res.status(500).json({ message: 'Günlük alınamadı', error: err.message });
+  }
+};

@@ -4,6 +4,8 @@ const path = require('path');
 const Setting = require('../models/Setting');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const REQUEST_TIMEOUT_MS = 20_000;
+const VIDEO_TIMEOUT_MS = 180_000;
 
 async function botConfig() {
   return { token: await Setting.get('crypto_tg_bot_token'), chatId: await Setting.get('crypto_tg_chat_id') };
@@ -32,7 +34,7 @@ async function sendMessage(text, { silent = false, buttons } = {}) {
     disable_web_page_preview: true,
     disable_notification: silent,
     reply_markup: replyMarkup(buttons),
-  });
+  }, { timeout: REQUEST_TIMEOUT_MS }); // zaman aşımsız istek takılırsa tarama sonsuza dek beklerdi
   return data.result.message_id;
 }
 
@@ -63,7 +65,7 @@ async function sendVideo(filePath, caption, { buttons } = {}) {
   form.append('supports_streaming', 'true');
   if (buttons) form.append('reply_markup', JSON.stringify(replyMarkup(buttons)));
   form.append('video', await fs.openAsBlob(filePath, { type: 'video/mp4' }), path.basename(filePath));
-  const { data } = await axios.post(apiUrl(token, 'sendVideo'), form, { maxBodyLength: Infinity });
+  const { data } = await axios.post(apiUrl(token, 'sendVideo'), form, { maxBodyLength: Infinity, timeout: VIDEO_TIMEOUT_MS });
   return data.result.message_id;
 }
 
@@ -71,7 +73,7 @@ async function sendVideo(filePath, caption, { buttons } = {}) {
 async function clearButtons(messageId) {
   const { token, chatId } = await botConfig();
   if (!token || !chatId || !messageId) return;
-  await axios.post(apiUrl(token, 'editMessageReplyMarkup'), { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } })
+  await axios.post(apiUrl(token, 'editMessageReplyMarkup'), { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }, { timeout: REQUEST_TIMEOUT_MS })
     .catch(() => {}); // mesaj silinmiş/zaten butonsuz olabilir
 }
 
@@ -92,7 +94,7 @@ function onCallback(prefix, handler, { ownerOnly = false } = {}) {
 }
 
 async function handleCallback(query, token, chatId) {
-  const answer = (text) => axios.post(apiUrl(token, 'answerCallbackQuery'), { callback_query_id: query.id, text, show_alert: false })
+  const answer = (text) => axios.post(apiUrl(token, 'answerCallbackQuery'), { callback_query_id: query.id, text, show_alert: false }, { timeout: REQUEST_TIMEOUT_MS })
     .catch(() => {});
   // Sadece ayarlı sohbetten gelen tıklamalar kabul edilir (bot başka yere eklenirse kimse tetikleyemesin)
   if (String(query.message?.chat?.id) !== String(chatId)) return answer('Yetkisiz');
@@ -147,7 +149,7 @@ async function listChats() {
   if (polling) return [...knownChats.values()];
   const token = await Setting.get('crypto_tg_bot_token');
   if (!token) throw new Error('Telegram bot token tanımlı değil');
-  const { data } = await axios.get(apiUrl(token, 'getUpdates'));
+  const { data } = await axios.get(apiUrl(token, 'getUpdates'), { timeout: REQUEST_TIMEOUT_MS });
   const chats = new Map();
   for (const u of data.result) {
     const chat = (u.message || u.channel_post || u.my_chat_member || {}).chat;

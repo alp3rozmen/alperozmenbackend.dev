@@ -26,11 +26,21 @@ function friendlyError(err) {
   return new Error(info.message || err.message);
 }
 
+// Zaman aşımsız Gemini isteği takılırsa onu bekleyen akış (örn. tarama) sonsuza dek bloke olur
+const GEMINI_TIMEOUT_MS = 120_000;
+function withTimeout(promise, ms, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // Geçici yoğunluk (503) hatalarında birkaç kez tekrar dener
 async function generate(ai, request) {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await ai.models.generateContent(request);
+      return await withTimeout(ai.models.generateContent(request), GEMINI_TIMEOUT_MS, `Gemini ${GEMINI_TIMEOUT_MS / 1000} sn içinde cevap vermedi`);
     } catch (err) {
       const transient = /"code":\s*(503|500)/.test(err.message);
       if (!transient || attempt >= 3) throw friendlyError(err);
