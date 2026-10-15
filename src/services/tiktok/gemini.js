@@ -259,6 +259,44 @@ const CHANNEL_IDEA_SCHEMA = {
   required: ['title', 'prompt', 'hookText', 'caption', 'hashtags', 'setting'],
 };
 
+// Hikaye modunda ek alanlar: bölüm özeti (sonraki bölümlerin hafızası) ve kapanış merakı (ekranda gösterilir)
+const STORY_IDEA_SCHEMA = {
+  ...CHANNEL_IDEA_SCHEMA,
+  properties: {
+    ...CHANNEL_IDEA_SCHEMA.properties,
+    summary: { type: 'string', description: 'Bu bölümde ne oldu: 1-2 cümle Türkçe (sonraki bölümler buna göre devam eder)' },
+    cliffhanger: {
+      type: 'string',
+      description: 'Bölüm sonunda ekranda çıkacak merak cümlesi, Türkçe, en fazla 8 kelime (ör. "Sunucuyu kim kapattı?"). Final bölümünde boş bırak.',
+    },
+  },
+  required: [...CHANNEL_IDEA_SCHEMA.required, 'summary', 'cliffhanger'],
+};
+
+// Dizi bölümü kuralları. cast: görselleri sırayla @image1, @image2... olarak videoya verilen karakterler.
+function storyRules({ season, episode, total, previous, cast }, seconds) {
+  const refs = cast.map((c, i) => `@image${i + 1} = ${c.name} (${c.description})`).join('; ');
+  const memory = previous.length
+    ? `Bu sezonun önceki bölümleri:\n${previous.map((p) => `- Bölüm ${p.episode}: ${p.summary}${p.cliffhanger ? ` (kapanış: ${p.cliffhanger})` : ''}`).join('\n')}\n`
+    : '';
+  const arc = episode === 1
+    ? '- Bu sezonun İLK bölümü: nişe uygun, birkaç bölüm sürecek komik bir ana dert/çatışma başlat.\n'
+    : episode === total
+      ? '- Bu sezonun FİNALİ: ana derdi büyük bir punchline ile bağla; cliffhanger alanını boş bırak.\n'
+      : '- Bir önceki bölümün kapanışından devam et; hikayeyi bir adım ilerlet, yeni bir komik engel çıkar.\n';
+  return `\nBu bir dizi: Sezon ${season}, Bölüm ${episode}/${total}.\n${memory}` +
+    'Kurallar:\n' + arc +
+    '- Her bölüm tek başına da güldürmeli (önceki bölümü izlemeyen de anlamalı); final dışında sonda izleyiciyi sonraki bölümü ' +
+    'merak ettiren bir kapanış (cliffhanger) olsun.\n' +
+    `- Sabit karakterler (görselleri videoya referans olarak veriliyor): ${refs}. prompt\'ta karakterlere @image numarasıyla ` +
+    'referans ver (ör. "@image1 slams the desk"); görünüşlerini değiştirme, başka ana karakter ekleme. Mekân bölümden bölüme değişebilir.\n' +
+    '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun ' +
+    '(biçim: <karakter> says in Turkish: "<replik>"). Her karakterin ses tonunu tarif et.\n' +
+    `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
+    '- Sokak dili, argo ve küfür serbest; komik ve abartılı. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret, gerçek kişi ve marka YOK.\n' +
+    '- No text, letters, subtitles, logos or watermarks in the video. Tek sahne, dikey 9:16.\n';
+}
+
 // Komedi videolarında her seferinde farklı bir kalıp; aynı "iki karakter atışıyor" sahnesi tekrar etmesin
 const COMEDY_FORMATS = [
   'İki karakter atışması: biri dert yanar, diğeri laf sokar',
@@ -285,11 +323,12 @@ function pickFormat(recent) {
 // Bir kanal için yeni video fikri; son başlıklar verilerek tekrar engellenir
 // comedy: karakterler Türkçe konuşur (Grok prompt'taki diyaloğu seslendirir), argo/küfür serbest.
 // recent: son fikirler (yeniden eskiye); başlık, format ve mekân tekrarını önlemek için.
-async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy = false }) {
+// story: { season, episode, total, previous, cast } verilirse dizi bölümü yazılır (komedi kuralları dahil).
+async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy = false, story = null }) {
   const ai = await client();
   const model = await Setting.get('gemini_text_model');
   const style = brief?.visualStyle ? `Kanalın sabit görsel stili (prompt'a dahil et): ${brief.visualStyle}\n` : '';
-  const format = comedy ? pickFormat(recent) : null;
+  const format = comedy && !story ? pickFormat(recent) : null;
   const history = recent.map((idea) => [idea.title, idea.format, idea.setting].filter(Boolean).join(' / '));
 
   const response = await generate(ai, {
@@ -303,8 +342,7 @@ async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy 
         ? `Daha önce yapılanlar (başlık / format / mekân; konuyu, mekânı ve karakterleri TEKRAR ETME): ${history.join(' | ')}\n`
         : '') +
       `\nBu kanal için ${seconds} saniyelik tek bir viral yapay zeka videosu fikri üret.\n` +
-      'Kurallar:\n' +
-      (comedy
+      (story ? storyRules(story, seconds) : 'Kurallar:\n' + (comedy
         ? `- Konuşmalı komedi skeci. Bu videonun formatı: ${format}. Sonda güldüren bir punchline olsun.\n` +
           '- Mekânı, karakterleri (sayısı, türü, görünüşü), kamera açısını ve ışığı önceki videolardan belirgin şekilde FARKLI seç; ' +
           'görsel stil nişte ya da kanal stilinde verilmediyse bu fikre en uygun animasyon tarzını kendin seç.\n' +
@@ -317,11 +355,12 @@ async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy 
         : '- İlk saniyede dikkat çeken, sonunda küçük bir sürpriz/espri olan, tekrar izletecek bir an.\n' +
           '- prompt İngilizce; tek sahne, dikey 9:16, sinematik; ne olduğunu, kamerayı, ışığı ve sesleri (efekt/müzik) tarif et. ' +
           'No speech, no dialogue, no voiceover. No text, letters, subtitles, logos or watermarks in the video. ' +
-          'No real people, celebrities, brands or copyrighted characters.\n') +
+          'No real people, celebrities, brands or copyrighted characters.\n')) +
       '- hookText ve açıklama Türkçe, doğal ve merak uyandıran.',
-    config: { responseMimeType: 'application/json', responseJsonSchema: CHANNEL_IDEA_SCHEMA },
+    config: { responseMimeType: 'application/json', responseJsonSchema: story ? STORY_IDEA_SCHEMA : CHANNEL_IDEA_SCHEMA },
   });
   const idea = JSON.parse(response.text);
+  if (story) return { ...idea, season: story.season, episode: story.episode, total: story.total };
   return format ? { ...idea, format } : idea;
 }
 

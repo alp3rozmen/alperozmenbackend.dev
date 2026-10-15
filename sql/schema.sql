@@ -158,6 +158,10 @@ CREATE TABLE IF NOT EXISTS ig_accounts (
   is_product TINYINT(1) NOT NULL DEFAULT 0,
   -- Konuşmalı komedi: karakterler Türkçe konuşur, argo/küfür serbest (Grok "fun" modu)
   comedy TINYINT(1) NOT NULL DEFAULT 0,
+  -- Hikaye modu (dizi): sabit karakterler, sezon/bölüm, merak uyandıran kapanış
+  story TINYINT(1) NOT NULL DEFAULT 0,
+  story_cast TEXT NULL,       -- JSON: [{ name, description, image, imageStatus, imageError }]
+  story_since DATETIME NULL,  -- "Yeni sezon başlat" anı; bundan önceki bölümler hikayeye dahil edilmez
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -190,6 +194,11 @@ ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS is_product TINYINT(1) NOT NULL 
 
 -- Konuşmalı komedi modu (mevcut tabloya ek kolon; bir kez çalıştır)
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS comedy TINYINT(1) NOT NULL DEFAULT 0;
+
+-- Hikaye modu (mevcut tabloya ek kolonlar; bir kez çalıştır)
+ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story_cast TEXT NULL;
+ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story_since DATETIME NULL;
 
 -- Gate.io hesabında GERÇEK işlemler. Bot alım emrini sadece kullanıcı onaylayınca (Telegram/panel) verir;
 -- sadece kendi aldığı miktarı satar, hesaptaki diğer varlıklara dokunmaz.

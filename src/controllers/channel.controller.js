@@ -1,5 +1,6 @@
 const fs = require('fs');
 const channels = require('../services/channel/channel.service');
+const story = require('../services/channel/story.service');
 const gemini = require('../services/tiktok/gemini');
 const IgAccount = require('../models/IgAccount');
 const ChannelVideo = require('../models/ChannelVideo');
@@ -9,9 +10,17 @@ function fail(res, err, message) {
   res.status(err.status || 500).json({ message, error: String(err.message).slice(0, 500) });
 }
 
+// Hikaye modundaki hesaplarda panelde "sıradaki bölüm" gösterilir
+async function accountView(account) {
+  const view = IgAccount.view(account);
+  if (!account.story) return view;
+  const next = await story.nextEpisode(account);
+  return { ...view, story_next: { season: next.season, episode: next.episode, total: next.total } };
+}
+
 exports.listAccounts = async (req, res) => {
   try {
-    res.json((await IgAccount.list()).map(IgAccount.view));
+    res.json(await Promise.all((await IgAccount.list()).map(accountView)));
   } catch (err) {
     fail(res, err, 'Hesaplar alınamadı');
   }
@@ -29,9 +38,37 @@ exports.addAccount = async (req, res) => {
 
 exports.updateAccount = async (req, res) => {
   try {
-    res.json(IgAccount.view(await channels.updateAccount(Number(req.params.id), req.body || {})));
+    res.json(await accountView(await channels.updateAccount(Number(req.params.id), req.body || {})));
   } catch (err) {
     fail(res, err, 'Hesap güncellenemedi');
+  }
+};
+
+// Karakter görselleri arka planda üretilir (karakter başına ~30 sn); panel hesabı tekrar çekerek durumu görür
+exports.generateCastImages = async (req, res) => {
+  try {
+    res.status(202).json(await accountView(await story.generateCastImages(Number(req.params.id), { all: req.body?.all === true })));
+  } catch (err) {
+    fail(res, err, 'Karakter görselleri üretilemedi');
+  }
+};
+
+exports.castImage = async (req, res) => {
+  try {
+    const account = await IgAccount.findById(Number(req.params.id));
+    const image = account?.story_cast[Number(req.params.index)]?.image;
+    if (!image) return res.status(404).json({ message: 'Görsel yok.' });
+    res.sendFile(story.castPath(image), { headers: { 'Content-Type': story.mimeOf(image) } });
+  } catch (err) {
+    fail(res, err, 'Görsel alınamadı');
+  }
+};
+
+exports.resetStory = async (req, res) => {
+  try {
+    res.json(await accountView(await channels.resetStory(Number(req.params.id))));
+  } catch (err) {
+    fail(res, err, 'Yeni sezon başlatılamadı');
   }
 };
 

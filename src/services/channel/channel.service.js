@@ -12,10 +12,13 @@ const telegram = require('../telegram');
 const instagram = require('../instagram.graph');
 const IgAccount = require('../../models/IgAccount');
 const ChannelVideo = require('../../models/ChannelVideo');
+const story = require('./story.service');
 
 // Niş kanalları: her hesabın paylaşım saatlerinden LEAD_MIN önce Gemini fikri → Grok klibi → hook yazısı →
 // Telegram'a "Paylaş / Atla" butonlarıyla gelir; onaylanınca o hesaba Reels olarak yüklenir.
 const MODEL = 'grok-imagine/text-to-video';
+const STORY_MODEL = 'grok-imagine/image-to-video'; // karakter görselleri referans verilir
+const END_CARD_SECONDS = 2;
 const RESOLUTION = '720p';
 const LEAD_MIN = 30; // video, paylaşım saatinde onaya hazır olsun
 const LATE_MIN = 90; // sunucu kapalıyken kaçan saat bu kadar geçmişse atlanır (eski saatleri toplu üretmesin)
@@ -78,26 +81,43 @@ async function assertBudget() {
 async function generate(account, slot) {
   if (account.is_product) throw Object.assign(new Error('Bu bir ürün hesabı; niş videosu üretilmez.'), { status: 400 });
   if (!account.niche) throw Object.assign(new Error('Önce hesaba bir niş seç.'), { status: 400 });
+  // Kayıt açılmadan kontrol: eksik görselle her denemede başarısız video ve Telegram hatası oluşmasın
+  const castProblem = account.story ? story.castProblem(account) : null;
+  if (castProblem) throw Object.assign(new Error(castProblem), { status: 400 });
   await assertBudget();
   const id = await ChannelVideo.createForSlot({ account_id: account.id, slot });
   if (!id) return null; // bu saat için zaten üretildi
   try {
+    // Hikaye modu: karakter görselleri baştan yüklenir (eksikse Gemini'ye boşuna gidilmesin)
+    const castUrls = account.story ? await story.uploadCast(account) : null;
+    const episode = account.story ? await story.nextEpisode(account) : null;
     const idea = await gemini.generateChannelIdea({
       niche: account.niche,
       brief: account.niche_brief,
       seconds: account.video_seconds,
       comedy: account.comedy,
       recent: await ChannelVideo.recentIdeas(account.id),
+      story: episode && { ...episode, cast: account.story_cast },
     });
     await ChannelVideo.update(id, { idea });
-    const taskId = await kie.createTask(MODEL, {
-      prompt: idea.prompt,
-      aspect_ratio: '9:16',
-      duration: account.video_seconds,
-      resolution: RESOLUTION,
-      // fun: daha yaratıcı/oyunbaz hareket; komedi videoları için
-      mode: account.comedy ? 'fun' : 'normal',
-    });
+    // fun: daha yaratıcı/oyunbaz hareket; komedi videoları için
+    const mode = account.comedy || account.story ? 'fun' : 'normal';
+    const taskId = castUrls
+      ? await kie.createTask(STORY_MODEL, {
+        image_urls: castUrls,
+        prompt: idea.prompt,
+        aspect_ratio: '9:16',
+        duration: String(account.video_seconds),
+        resolution: RESOLUTION,
+        mode,
+      })
+      : await kie.createTask(MODEL, {
+        prompt: idea.prompt,
+        aspect_ratio: '9:16',
+        duration: account.video_seconds,
+        resolution: RESOLUTION,
+        mode,
+      });
     await ChannelVideo.update(id, { kie_task_id: taskId });
     ensurePoller();
   } catch (err) {
@@ -118,8 +138,29 @@ async function download(url, target) {
   });
 }
 
+const episodeLabel = (idea) => `Sezon ${idea.season} • Bölüm ${idea.episode}`;
+
 function captionText(idea) {
-  return `${idea.caption}\n\n${idea.hashtags.join(' ')}`;
+  if (!idea.episode) return `${idea.caption}\n\n${idea.hashtags.join(' ')}`;
+  const next = idea.episode < idea.total ? `👀 Bölüm ${idea.episode + 1} için takip et!` : '🎬 Sezon finali! Yeni sezon için takip et.';
+  return `📺 ${episodeLabel(idea)}\n${idea.caption}\n\n${next}\n\n${idea.hashtags.join(' ')}`;
+}
+
+// Açılışta hook, sonda takip çağrısı; dizi bölümünde üstte "Sezon • Bölüm" etiketi ve kapanış merakı
+function overlayEvents(idea, seconds, username) {
+  const events = [{ start: 0, end: Math.min(HOOK_SECONDS, seconds), style: 'Hook', text: idea.hookText }];
+  if (idea.episode) events.push({ start: 0, end: seconds, style: 'Tag', text: episodeLabel(idea) });
+  const endStart = Math.max(HOOK_SECONDS + 0.5, seconds - END_CARD_SECONDS);
+  if (endStart < seconds - 0.5) {
+    let text = `Takip et: @${username}`;
+    if (idea.episode) {
+      text = idea.episode < idea.total
+        ? `${idea.cliffhanger ? idea.cliffhanger + '\n' : ''}Bölüm ${idea.episode + 1} için takip et`
+        : 'Sezon finali!\nYeni sezon için takip et';
+    }
+    events.push({ start: endStart, end: seconds, style: 'Text', text });
+  }
+  return events;
 }
 
 // Klibi 720x1280'e çevirip hook yazısını ekler, sonra Telegram'a onaya gönderir
@@ -136,9 +177,7 @@ async function render(id) {
     await renderService.normalizeSegment({ file: raw, hasAudio: info.hasAudio, speed: 1, outSeconds: seconds }, part);
 
     const assFile = path.join(work, 'subs.ass');
-    await fs.promises.writeFile(assFile, renderService.buildAss([
-      { start: 0, end: Math.min(HOOK_SECONDS, seconds), style: 'Hook', text: video.idea.hookText },
-    ]));
+    await fs.promises.writeFile(assFile, renderService.buildAss(overlayEvents(video.idea, seconds, account?.username || '')));
     const fileName = `${id}.mp4`;
     await ffmpeg.run([
       '-i', part,
@@ -150,7 +189,7 @@ async function render(id) {
     await fs.promises.unlink(raw).catch(() => {});
     await ChannelVideo.update(id, { status: 'ready', file_path: fileName, completedAt: new Date() });
 
-    const header = `📱 @${account?.username || '?'} · ${video.idea.title} (#${id})`;
+    const header = `📱 @${account?.username || '?'} · ${video.idea.episode ? episodeLabel(video.idea) + ': ' : ''}${video.idea.title} (#${id})`;
     await telegram.sendVideo(filePath(fileName), `${header}\n\n🪝 ${video.idea.hookText}\n\n${captionText(video.idea)}`, {
       buttons: [[{ text: '✅ Paylaş', data: `cv:pub:${id}` }, { text: '⏭ Atla', data: `cv:skip:${id}` }]],
     }).catch((err) => console.error('Telegram video hatası:', err.response?.data?.description || err.message));
@@ -259,6 +298,8 @@ async function scheduleTick() {
   const now = Date.now();
   for (const account of await IgAccount.list()) {
     if (!account.active || !account.niche || account.is_product) continue;
+    // Karakter görselleri hazır değilse sessizce atla (panelde uyarı görünüyor; her dakika hata yazmasın)
+    if (account.story && story.castProblem(account)) continue;
     for (const slot of todaySlots(account, now)) {
       if (now < slot.at - LEAD_MIN * 60_000 || now > slot.at + LATE_MIN * 60_000) continue;
       await generate(account, slot.key).catch((err) => {
@@ -325,6 +366,13 @@ async function updateAccount(id, fields) {
   }
   if (fields.active !== undefined) out.active = !!fields.active;
   if (fields.comedy !== undefined) out.comedy = !!fields.comedy;
+  if (fields.story !== undefined) out.story = !!fields.story;
+  let removedImages = [];
+  if (fields.cast !== undefined) {
+    const merged = story.mergeCast(account.story_cast, fields.cast);
+    out.story_cast = merged.cast;
+    removedImages = merged.removed;
+  }
   // Ürün hesabı niş otomasyonuna girmez; işaretlenince otomatik üretim kapanır
   if (fields.isProduct !== undefined) {
     out.is_product = !!fields.isProduct;
@@ -340,6 +388,7 @@ async function updateAccount(id, fields) {
     throw Object.assign(new Error('Otomatik üretimi açmadan önce niş seç.'), { status: 400 });
   }
   if (Object.keys(out).length) await IgAccount.update(id, out);
+  await story.removeImages(removedImages);
   return IgAccount.findById(id);
 }
 
@@ -348,6 +397,8 @@ async function removeAccount(id) {
     if (video.file_path) await fs.promises.unlink(filePath(video.file_path)).catch(() => {});
   }
   await ChannelVideo.removeByAccount(id);
+  const account = await IgAccount.findById(id);
+  if (account) await story.removeImages(account.story_cast.map((c) => c.image).filter(Boolean));
   return IgAccount.remove(id);
 }
 
@@ -388,6 +439,13 @@ async function resume() {
   }
 }
 
+// Yeni sezon: bu andan önceki bölümler hikaye hafızasına dahil edilmez, sıradaki bölüm yeni sezonun 1. bölümü olur
+async function resetStory(id) {
+  if (!(await IgAccount.findById(id))) throw Object.assign(new Error('Hesap bulunamadı.'), { status: 404 });
+  await IgAccount.update(id, { story_since: new Date() });
+  return IgAccount.findById(id);
+}
+
 module.exports = {
-  generate, publish, skip, addAccount, updateAccount, removeAccount, removeVideo, resume, filePath, todaySlots,
+  generate, publish, skip, addAccount, updateAccount, removeAccount, removeVideo, resume, filePath, todaySlots, resetStory,
 };

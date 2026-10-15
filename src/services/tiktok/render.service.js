@@ -126,6 +126,8 @@ function buildAss(events) {
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     'Style: Hook,Noto Sans Black,58,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,5,2,5,70,90,0,1',
     'Style: Text,Noto Sans Black,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,4,2,5,70,90,0,1',
+    // Üstte küçük etiket (ör. "Sezon 1 • Bölüm 2"); Instagram'ın üst arayüzüne denk gelmesin diye biraz aşağıda
+    'Style: Tag,Noto Sans Black,36,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,0,0,3,10,0,8,70,90,170,1',
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',

@@ -1,7 +1,13 @@
 const { db } = require('../config/db');
 
 const parse = (row) => row && {
-  ...row, active: !!row.active, is_product: !!row.is_product, comedy: !!row.comedy, niche_brief: row.niche_brief ? JSON.parse(row.niche_brief) : null,
+  ...row,
+  active: !!row.active,
+  is_product: !!row.is_product,
+  comedy: !!row.comedy,
+  story: !!row.story,
+  story_cast: row.story_cast ? JSON.parse(row.story_cast) : [],
+  niche_brief: row.niche_brief ? JSON.parse(row.niche_brief) : null,
 };
 
 // Panelde token gösterilmez
@@ -32,6 +38,8 @@ function serialize(fields) {
   if (out.active !== undefined) out.active = out.active ? 1 : 0;
   if (out.is_product !== undefined) out.is_product = out.is_product ? 1 : 0;
   if (out.comedy !== undefined) out.comedy = out.comedy ? 1 : 0;
+  if (out.story !== undefined) out.story = out.story ? 1 : 0;
+  if (out.story_cast !== undefined) out.story_cast = out.story_cast?.length ? JSON.stringify(out.story_cast) : null;
   return out;
 }
 

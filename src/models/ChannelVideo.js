@@ -36,11 +36,22 @@ async function findByStatus(status) {
   return rows.map(parse);
 }
 
-// Gemini'ye "bunları tekrar etme" diye verilir
 // Son fikirler (yeniden eskiye): tekrarı önlemek için başlık, format ve mekân Gemini'ye verilir
 async function recentIdeas(accountId, limit = 30) {
   const [rows] = await db.query('SELECT idea FROM channel_videos WHERE account_id = ? AND idea IS NOT NULL ORDER BY id DESC LIMIT ?', [accountId, limit]);
   return rows.map((r) => JSON.parse(r.idea)).filter((idea) => idea?.title);
+}
+
+// Hikaye modunda yayınlanmış/yayına hazır bölümler (yeniden eskiye). Atlanan ve başarısız olanlar hikayeye sayılmaz.
+// since: "yeni sezon başlat" anı; verilirse ondan önceki bölümler dahil edilmez.
+async function storyIdeas(accountId, since = null, limit = 12) {
+  const [rows] = await db.query(
+    `SELECT idea FROM channel_videos WHERE account_id = ? AND idea IS NOT NULL
+       AND status IN ('generating','rendering','ready','publishing','published')${since ? ' AND createdAt >= ?' : ''}
+     ORDER BY id DESC LIMIT ?`,
+    since ? [accountId, since, limit] : [accountId, limit]
+  );
+  return rows.map((r) => JSON.parse(r.idea)).filter((idea) => idea?.episode);
 }
 
 async function update(id, fields) {
@@ -73,5 +84,5 @@ async function findExpiredFiles(before) {
 }
 
 module.exports = {
-  createForSlot, findById, list, findByStatus, recentIdeas, update, transition, remove, removeByAccount, creditsSince, findExpiredFiles,
+  createForSlot, findById, list, findByStatus, recentIdeas, storyIdeas, update, transition, remove, removeByAccount, creditsSince, findExpiredFiles,
 };
