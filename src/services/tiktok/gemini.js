@@ -296,7 +296,11 @@ function storyRules({ season, episode, total, previous, cast, premise }, seconds
     '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun ' +
     '(biçim: <karakter> says in Turkish: "<replik>"). Her karakterin ses tonunu tarif et.\n' +
     `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
-    '- Sokak dili, argo ve küfür serbest; komik ve abartılı. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret, gerçek kişi ve marka YOK.\n' +
+    '- Sokak dili, argo ve küfür serbest; komik ve abartılı. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret YOK.\n' +
+    // Tarihsel olay anlatan sezonlar için: gerçek şirket/olay anılabilir ama kişi canlandırılmaz, hakaret duruma yönelir
+    '- Gerçek şirket, ürün ve olaylar tarihsel bilgi olarak anılabilir; yıl, rakam ve ana olay DOĞRU olsun, emin olmadığın ayrıntıyı uydurma. ' +
+    'Gerçek kişiler videoda canlandırılmaz, onların rolünü bizim karakterler oynar. Küfür ve hakaret gerçek bir kişiye ya da şirkete değil, ' +
+    'duruma yöneltilir.\n' +
     '- No text, letters, subtitles, logos or watermarks in the video. Tek sahne, dikey 9:16.\n';
 }
 
