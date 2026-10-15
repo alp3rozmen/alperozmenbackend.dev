@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS ig_accounts (
   story TINYINT(1) NOT NULL DEFAULT 0,
   story_cast TEXT NULL,       -- JSON: [{ name, description, image, imageStatus, imageError }]
   story_since DATETIME NULL,  -- "Yeni sezon başlat" anı; bundan önceki bölümler hikayeye dahil edilmez
+  story_premise TEXT NULL,    -- Sezon konusu: Gemini bölümleri buna göre kurar
   createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -199,6 +200,7 @@ ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS comedy TINYINT(1) NOT NULL DEFA
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story_cast TEXT NULL;
 ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story_since DATETIME NULL;
+ALTER TABLE ig_accounts ADD COLUMN IF NOT EXISTS story_premise TEXT NULL;
 
 -- Gate.io hesabında GERÇEK işlemler. Bot alım emrini sadece kullanıcı onaylayınca (Telegram/panel) verir;
 -- sadece kendi aldığı miktarı satar, hesaptaki diğer varlıklara dokunmaz.

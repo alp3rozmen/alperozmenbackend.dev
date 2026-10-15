@@ -97,7 +97,7 @@ async function generate(account, slot) {
       seconds: account.video_seconds,
       comedy: account.comedy,
       recent: await ChannelVideo.recentIdeas(account.id),
-      story: episode && { ...episode, cast: account.story_cast },
+      story: episode && { ...episode, cast: account.story_cast, premise: account.story_premise },
     });
     await ChannelVideo.update(id, { idea });
     // fun: daha yaratıcı/oyunbaz hareket; komedi videoları için
@@ -367,6 +367,7 @@ async function updateAccount(id, fields) {
   if (fields.active !== undefined) out.active = !!fields.active;
   if (fields.comedy !== undefined) out.comedy = !!fields.comedy;
   if (fields.story !== undefined) out.story = !!fields.story;
+  if (fields.premise !== undefined) out.story_premise = String(fields.premise).trim().slice(0, 2000) || null;
   let removedImages = [];
   if (fields.cast !== undefined) {
     const merged = story.mergeCast(account.story_cast, fields.cast);

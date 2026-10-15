@@ -12,6 +12,7 @@ const COLUMNS = [
   ['ig_accounts', 'story', 'TINYINT(1) NOT NULL DEFAULT 0'],
   ['ig_accounts', 'story_cast', 'TEXT NULL'],
   ['ig_accounts', 'story_since', 'DATETIME NULL'],
+  ['ig_accounts', 'story_premise', 'TEXT NULL'],
   ['crypto_trades', 'pending_text', 'VARCHAR(40) NULL'],
   ['crypto_trades', 'pending_at', 'DATETIME NULL'],
   ['crypto_trades', 'pending_cancel', 'VARCHAR(500) NULL'],

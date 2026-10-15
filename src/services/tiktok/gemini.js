@@ -274,7 +274,7 @@ const STORY_IDEA_SCHEMA = {
 };
 
 // Dizi bölümü kuralları. cast: görselleri sırayla @image1, @image2... olarak videoya verilen karakterler.
-function storyRules({ season, episode, total, previous, cast }, seconds) {
+function storyRules({ season, episode, total, previous, cast, premise }, seconds) {
   const refs = cast.map((c, i) => `@image${i + 1} = ${c.name} (${c.description})`).join('; ');
   const memory = previous.length
     ? `Bu sezonun önceki bölümleri:\n${previous.map((p) => `- Bölüm ${p.episode}: ${p.summary}${p.cliffhanger ? ` (kapanış: ${p.cliffhanger})` : ''}`).join('\n')}\n`
@@ -284,7 +284,10 @@ function storyRules({ season, episode, total, previous, cast }, seconds) {
     : episode === total
       ? '- Bu sezonun FİNALİ: ana derdi büyük bir punchline ile bağla; cliffhanger alanını boş bırak.\n'
       : '- Bir önceki bölümün kapanışından devam et; hikayeyi bir adım ilerlet, yeni bir komik engel çıkar.\n';
-  return `\nBu bir dizi: Sezon ${season}, Bölüm ${episode}/${total}.\n${memory}` +
+  const plan = premise
+    ? `Sezon konusu (bölümlere yay; bölüm bölüm adımlar verildiyse bu bölümde ${episode}. adımı işle): ${premise}\n`
+    : '';
+  return `\nBu bir dizi: Sezon ${season}, Bölüm ${episode}/${total}.\n${plan}${memory}` +
     'Kurallar:\n' + arc +
     '- Her bölüm tek başına da güldürmeli (önceki bölümü izlemeyen de anlamalı); final dışında sonda izleyiciyi sonraki bölümü ' +
     'merak ettiren bir kapanış (cliffhanger) olsun.\n' +
