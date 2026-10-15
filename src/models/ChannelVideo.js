@@ -46,7 +46,8 @@ async function recentIdeas(accountId, limit = 30) {
 // since: "yeni sezon başlat" anı; verilirse ondan önceki bölümler dahil edilmez.
 async function storyIdeas(accountId, since = null, limit = 12) {
   const [rows] = await db.query(
-    `SELECT idea FROM channel_videos WHERE account_id = ? AND idea IS NOT NULL
+    // LIMIT'ten önce bölüm olmayan (hikaye modu dışı) videolar elensin; yoksa son bölüm gözden kaçabilir
+    `SELECT idea FROM channel_videos WHERE account_id = ? AND idea LIKE '%"episode":%'
        AND status IN ('generating','rendering','ready','publishing','published')${since ? ' AND createdAt >= ?' : ''}
      ORDER BY id DESC LIMIT ?`,
     since ? [accountId, since, limit] : [accountId, limit]
