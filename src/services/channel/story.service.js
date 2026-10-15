@@ -94,7 +94,9 @@ async function generateCastImages(accountId, { all = false } = {}) {
   if (!account) throw Object.assign(new Error('Hesap bulunamadı.'), { status: 404 });
   if (!account.story_cast.length) throw Object.assign(new Error('Önce karakter ekle.'), { status: 400 });
 
-  const targets = account.story_cast.map((c, i) => i).filter((i) => all || !account.story_cast[i].image);
+  // "pending" kalmış ama şu an çalışmayan (sunucu yeniden başlamış) karakterler de yeniden üretilir
+  const targets = account.story_cast.map((c, i) => i)
+    .filter((i) => all || !account.story_cast[i].image || account.story_cast[i].imageStatus === 'pending');
   if (!targets.length) return account;
   const cast = account.story_cast.map((c, i) => (targets.includes(i) ? { ...c, imageStatus: 'pending', imageError: null } : c));
   await IgAccount.update(accountId, { story_cast: cast });
@@ -114,11 +116,16 @@ async function generateCastImages(accountId, { all = false } = {}) {
           latest[i] = { ...latest[i], image, imageStatus: 'ready', imageError: null };
           await IgAccount.update(accountId, { story_cast: latest });
         } catch (err) {
+          console.error(`@${account.username} karakter görseli (${character.name}) üretilemedi:`, err.message);
           const latest = (await IgAccount.findById(accountId)).story_cast;
           if (latest[i]) latest[i] = { ...latest[i], imageStatus: 'fail', imageError: String(err.message).slice(0, 200) };
           await IgAccount.update(accountId, { story_cast: latest });
         }
       }
+    } catch (err) {
+      // Döngünün kendisi koptuysa (ör. DB hatası) "üretiliyor"da asılı kalan karakter olmasın
+      console.error(`@${account.username} karakter görselleri yarıda kaldı:`, err.message);
+      await markStale(accountId, 'Üretim yarıda kaldı; tekrar dene.').catch(() => {});
     } finally {
       generating.delete(accountId);
     }
@@ -135,6 +142,21 @@ function castProblem(account) {
   return null;
 }
 
+// "pending" durumundaki karakterleri hata durumuna çeker (panelde buton tekrar açılsın)
+async function markStale(accountId, message) {
+  const account = await IgAccount.findById(accountId);
+  if (!account?.story_cast.some((c) => c.imageStatus === 'pending')) return;
+  const cast = account.story_cast.map((c) => (c.imageStatus === 'pending' ? { ...c, imageStatus: 'fail', imageError: message } : c));
+  await IgAccount.update(accountId, { story_cast: cast });
+}
+
+// Açılışta: üretim işi bellekte çalıştığı için yeniden başlatmada ölür; yarım kalanlar "tekrar üret" durumuna alınır
+async function recoverPending() {
+  for (const account of await IgAccount.list()) {
+    await markStale(account.id, 'Sunucu yeniden başladı, üretim yarıda kaldı; tekrar üret.');
+  }
+}
+
 // Her bölümde karakter görselleri kie.ai'ye yüklenir (ücretsiz, 24 saat tutulur); sırası @image numarasıdır
 async function uploadCast(account) {
   const problem = castProblem(account);
@@ -149,5 +171,5 @@ async function uploadCast(account) {
 }
 
 module.exports = {
-  SEASON_EPISODES, MAX_CAST, nextEpisode, mergeCast, removeImages, generateCastImages, uploadCast, castProblem, castPath, mimeOf,
+  SEASON_EPISODES, MAX_CAST, nextEpisode, mergeCast, removeImages, generateCastImages, recoverPending, uploadCast, castProblem, castPath, mimeOf,
 };

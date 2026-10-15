@@ -417,6 +417,7 @@ async function removeVideo(id) {
 
 async function resume() {
   try {
+    await story.recoverPending();
     for (const video of await ChannelVideo.findByStatus('rendering')) {
       renderService.exclusive(() => render(video.id)).catch(() => {});
     }
