@@ -259,6 +259,12 @@ const CHANNEL_IDEA_SCHEMA = {
   required: ['title', 'prompt', 'hookText', 'caption', 'hashtags', 'setting'],
 };
 
+// Replik sayısı süreye göre: ~5 sn'de bir kısa replik. Daha sıkışık olunca karakterler koşturarak konuşuyordu.
+function dialogueRule(seconds) {
+  return `- Diyalog ${seconds} saniyeye rahat sığmalı: en fazla ${Math.max(2, Math.floor(seconds / 5))} replik, her biri en fazla 8 kelime. ` +
+    'Karakterler acele etmeden, doğal hızda konuşsun; replikler arasında tepki, bakışma ya da kısa sessizlik payı bırak.\n';
+}
+
 // Hikaye modunda ek alanlar: bölüm özeti (sonraki bölümlerin hafızası) ve kapanış merakı (ekranda gösterilir)
 const STORY_IDEA_SCHEMA = {
   ...CHANNEL_IDEA_SCHEMA,
@@ -295,7 +301,7 @@ function storyRules({ season, episode, total, previous, cast, premise }, seconds
     'referans ver (ör. "@image1 slams the desk"); görünüşlerini değiştirme, başka ana karakter ekleme. Mekân bölümden bölüme değişebilir.\n' +
     '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun ' +
     '(biçim: <karakter> says in Turkish: "<replik>"). Her karakterin ses tonunu tarif et.\n' +
-    `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
+    dialogueRule(seconds) +
     '- Sokak dili, argo ve küfür serbest; komik ve abartılı. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret YOK.\n' +
     // Tarihsel olay anlatan sezonlar için: gerçek şirket/olay anılabilir ama kişi canlandırılmaz, hakaret duruma yönelir
     '- Gerçek şirket, ürün ve olaylar tarihsel bilgi olarak anılabilir; yıl, rakam ve ana olay DOĞRU olsun, emin olmadığın ayrıntıyı uydurma. ' +
@@ -355,7 +361,7 @@ async function generateChannelIdea({ niche, brief, seconds, recent = [], comedy 
           'görsel stil nişte ya da kanal stilinde verilmediyse bu fikre en uygun animasyon tarzını kendin seç.\n' +
           '- prompt İngilizce yazılır AMA karakterlerin söyledikleri TÜRKÇE ve tırnak içinde, kimin söylediği belli olsun ' +
           '(biçim: <karakter> says in Turkish: "<replik>"). Her karakterin ses tonunu tarif et.\n' +
-          `- Diyalog ${seconds} saniyeye sığmalı: en fazla ${Math.max(2, Math.round(seconds / 3))} kısa replik.\n` +
+          dialogueRule(seconds) +
           '- Sokak dili, argo ve küfür serbest; komik ve abartılı olsun. Irkçı, cinsiyetçi ya da bir grubu aşağılayan hakaret, ' +
           'gerçek kişi ve marka YOK.\n' +
           '- No text, letters, subtitles, logos or watermarks in the video. Tek sahne, dikey 9:16.\n'

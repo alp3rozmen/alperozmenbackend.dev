@@ -19,6 +19,7 @@ const story = require('./story.service');
 const MODEL = 'grok-imagine/text-to-video';
 const STORY_MODEL = 'grok-imagine/image-to-video'; // karakter görselleri referans verilir
 const END_CARD_SECONDS = 2;
+const VIDEO_SECONDS = [6, 8, 10, 15, 20, 30];
 const RESOLUTION = '720p';
 const LEAD_MIN = 30; // video, paylaşım saatinde onaya hazır olsun
 const LATE_MIN = 90; // sunucu kapalıyken kaçan saat bu kadar geçmişse atlanır (eski saatleri toplu üretmesin)
@@ -361,7 +362,8 @@ async function updateAccount(id, fields) {
   }
   if (fields.videoSeconds !== undefined) {
     const seconds = Number(fields.videoSeconds);
-    if (![6, 8, 10, 15].includes(seconds)) throw Object.assign(new Error('Süre 6, 8, 10 veya 15 sn olmalı.'), { status: 400 });
+    // Grok tek seferde 6-30 sn üretebiliyor; uzun bölümler birleştirmeden tek klip olarak üretilir (ses/görünüş tutarlı kalır)
+    if (!VIDEO_SECONDS.includes(seconds)) throw Object.assign(new Error(`Süre ${VIDEO_SECONDS.join(', ')} sn olabilir.`), { status: 400 });
     out.video_seconds = seconds;
   }
   if (fields.active !== undefined) out.active = !!fields.active;
