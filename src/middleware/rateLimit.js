@@ -12,10 +12,13 @@ module.exports = function rateLimit({ windowMs, max, message }) {
 
   return function (req, res, next) {
     const now = Date.now();
-    let entry = hits.get(req.ip);
+    // Cloudflare arkasında req.ip Cloudflare'in IP'si olur; gerçek ziyaretçi CF-Connecting-IP'de gelir.
+    // (Başlık, Cloudflare atlanıp sunucuya doğrudan gelen istekte taklit edilebilir; sadece yavaşlatıcı olduğu için kabul edilebilir.)
+    const key = req.get('cf-connecting-ip') || req.ip;
+    let entry = hits.get(key);
     if (!entry || entry.resetAt <= now) {
       entry = { count: 0, resetAt: now + windowMs };
-      hits.set(req.ip, entry);
+      hits.set(key, entry);
     }
     entry.count++;
     if (entry.count > max) {
