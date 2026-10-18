@@ -266,7 +266,7 @@ async function publish(id) {
         buttons: [[{ text: '🔁 Tekrar dene', data: `cv:pub:${id}` }, { text: '⏭ Atla', data: `cv:skip:${id}` }]],
       }).catch(() => {});
     }
-  })();
+  })().catch((err) => console.error(`Kanal videosu #${id} paylaşım durumu kaydedilemedi:`, err.message)); // yakalanmazsa sunucu çöker
 }
 
 async function skip(id) {

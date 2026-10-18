@@ -74,9 +74,10 @@ async function clear() {
   await db.query('TRUNCATE TABLE app_logs').catch(() => db.query('DELETE FROM app_logs'));
 }
 
-async function write(level, source, message) {
+// force: günlük kapalı olsa da yazılır (sunucu çökmesi gibi nadir ve kritik kayıtlar)
+async function write(level, source, message, { force = false } = {}) {
   try {
-    if (!(await isEnabled())) return;
+    if (!force && !(await isEnabled())) return;
     const text = String(message).replace(/\s+/g, ' ').slice(0, 1000);
     const now = Date.now();
     if (level !== 'info') {
@@ -95,7 +96,7 @@ async function write(level, source, message) {
 
 const info = (source, message) => { console.log(`[${source}] ${message}`); return write('info', source, message); };
 const warn = (source, message) => { console.warn(`[${source}] ${message}`); return write('warn', source, message); };
-const error = (source, message) => { console.error(`[${source}] ${message}`); return write('error', source, message); };
+const error = (source, message, opts) => { console.error(`[${source}] ${message}`); return write('error', source, message, opts); };
 
 function formatArg(arg) {
   if (arg instanceof Error) return arg.stack ? arg.stack.split('\n').slice(0, 3).join(' ') : arg.message;

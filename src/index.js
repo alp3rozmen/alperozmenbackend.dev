@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const log = require('./services/logger');
 log.captureConsole(); // mevcut console.error/warn çağrıları da panel günlüğüne düşsün
 const app = require('./app');
@@ -11,10 +13,26 @@ const tiktokRenders = require('./services/tiktok/render.service');
 const productVideos = require('./services/tiktok/autovideo.service');
 const channels = require('./services/channel/channel.service');
 
-// Yakalanmamış hata: önce günlüğe yaz, sonra çık (Passenger/Docker yeniden başlatır; Node varsayılanı da buydu)
+// Çökme sebebi önce senkron olarak dosyaya yazılır: veritabanı yazımı çıkıştan önce yetişmeyebilir ya da günlük kapalı olabilir.
+// storage/ git'e girmediği için yayınlamalarda silinmez; 1 MB'ı geçince eski dosya .1 olarak saklanır.
+const CRASH_LOG = path.join(__dirname, '..', 'storage', 'crash.log');
+
+function writeCrashLog(text) {
+    try {
+        fs.mkdirSync(path.dirname(CRASH_LOG), { recursive: true });
+        if (fs.existsSync(CRASH_LOG) && fs.statSync(CRASH_LOG).size > 1024 * 1024) fs.renameSync(CRASH_LOG, `${CRASH_LOG}.1`);
+        fs.appendFileSync(CRASH_LOG, `${new Date().toISOString()} ${text}\n\n`);
+    } catch {
+        // dosyaya yazılamazsa en azından konsola (passenger.log) düşer
+    }
+}
+
+// Yakalanmamış hata: dosyaya ve günlüğe yaz, sonra çık (Passenger/Docker yeniden başlatır; Node varsayılanı da buydu)
 for (const event of ['uncaughtException', 'unhandledRejection']) {
     process.on(event, (err) => {
-        log.error('sunucu', `${event}: ${err?.stack || err}`);
+        const text = `${event}: ${err?.stack || err}`;
+        writeCrashLog(text);
+        log.error('sunucu', text, { force: true });
         setTimeout(() => process.exit(1), 800);
     });
 }

@@ -286,7 +286,7 @@ async function start({ productName, notes, photos, autoPublish, quality, igAccou
   // Uzun sürer (yükleme + Gemini); istek beklemesin, panel durumu sorgular
   prepare(id, { productName, notes, photos, quality }).catch((err) => {
     console.error(`Ürün videosu #${id} hazırlık hatası:`, err.message);
-    failVideo(id, short(err));
+    failVideo(id, short(err)).catch(() => {}); // DB'ye yazılamazsa yakalanmamış hata sunucuyu çökertmesin
   });
   return ProductVideo.findById(id);
 }
