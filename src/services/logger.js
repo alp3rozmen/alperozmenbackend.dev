@@ -127,10 +127,18 @@ function captureConsole() {
 }
 
 // level: 'error' (sadece hatalar) | 'warn' (uyarı + hata) | 'all'
-async function read({ level = 'all', limit = 100 } = {}) {
+async function read({ level = 'all', limit = 100, source = '' } = {}) {
   await ensureTable();
-  const where = level === 'error' ? "WHERE level = 'error'" : level === 'warn' ? "WHERE level IN ('warn','error')" : '';
-  const [rows] = await db.query(`SELECT id, level, source, message, createdAt FROM app_logs ${where} ORDER BY id DESC LIMIT ?`, [Math.min(Number(limit) || 100, 300)]);
+  const conds = [];
+  const params = [];
+  if (level === 'error') conds.push("level = 'error'");
+  else if (level === 'warn') conds.push("level IN ('warn','error')");
+  if (source) {
+    conds.push('source = ?');
+    params.push(source);
+  }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  const [rows] = await db.query(`SELECT id, level, source, message, createdAt FROM app_logs ${where} ORDER BY id DESC LIMIT ?`, [...params, Math.min(Number(limit) || 100, 300)]);
   return rows;
 }
 

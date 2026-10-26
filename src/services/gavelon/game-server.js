@@ -4179,7 +4179,11 @@ function armTurnTimer(room) {
   if (ms === null) return;
   room.turnDeadline = Date.now() + ms;
   room.turnTimeout = setTimeout(() => {
-    if (room.auction?.turn === turn) runAction(room, { type: "pass", player: turn });
+    try {
+      if (room.auction?.turn === turn) runAction(room, { type: "pass", player: turn });
+    } catch (e) {
+      console.error("S\xFCre dolumu hamlesi ba\u015Far\u0131s\u0131z:", e);
+    }
   }, ms);
 }
 function runAction(room, action) {

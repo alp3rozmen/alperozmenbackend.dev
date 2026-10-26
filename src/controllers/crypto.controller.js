@@ -223,7 +223,8 @@ exports.clearLogs = async (req, res) => {
 exports.logs = async (req, res) => {
   try {
     const level = ['error', 'warn'].includes(req.query.level) ? req.query.level : 'all';
-    res.json(await serverLog.read({ level, limit: Number(req.query.limit) || 100 }));
+    const source = /^[\w-]{1,40}$/.test(req.query.source || '') ? req.query.source : '';
+    res.json(await serverLog.read({ level, limit: Number(req.query.limit) || 100, source }));
   } catch (err) {
     res.status(500).json({ message: 'Günlük alınamadı', error: err.message });
   }
