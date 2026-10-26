@@ -4369,12 +4369,14 @@ function attachGameServer(http, options = {}) {
       sync(room);
     });
   });
-  void refreshData(true);
-  setInterval(() => void refreshData(), REFRESH_MS).unref();
+  const { loadData } = options;
+  void refreshData(true, loadData);
+  setInterval(() => void refreshData(false, loadData), REFRESH_MS).unref();
   return wss;
 }
-async function refreshData(first = false) {
-  const result = await loadRemoteData();
+async function refreshData(first = false, loadData) {
+  const fetchImpl = loadData ? (async () => ({ ok: true, status: 200, json: () => loadData() })) : void 0;
+  const result = await loadRemoteData(DATA_URL, { fetchImpl });
   if (!result.ok) console.warn(`\u0130\xE7erik y\xFCklenemedi (${DATA_URL}), eldeki veri kullan\u0131l\u0131yor: ${result.errors.join("; ")}`);
   else if (first || result.changed) console.log(`\u0130\xE7erik y\xFCklendi: s\xFCr\xFCm ${result.version ?? "paketle gelen"} \xB7 ${gameData.characters.length} karakter`);
 }

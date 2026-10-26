@@ -45,8 +45,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // Gavelon oyun sunucusu (WebSocket): aynı HTTP sunucusuna bağlanır, yalnızca bu yoldaki yükseltmeleri alır.
 // Hata verirse backend'in geri kalanı etkilenmesin.
 try {
-    const wsPath = process.env.GAVELON_WS_PATH || '/gavelon-ws';
-    require('./services/gavelon/game-server').attachGameServer(server, { path: wsPath });
+    // Passenger alt yolu (BASE_PATH, örn. /admin) silmeden ilettiği için WebSocket yolu da onunla başlar
+    const wsPath = process.env.GAVELON_WS_PATH || `${(process.env.BASE_PATH || '').replace(/\/+$/, '')}/gavelon-ws`;
+    const Gavelon = require('./models/Gavelon');
+    // İçerik ağdan değil doğrudan modelden okunur: kendi adresimize Node'dan istek atmak bot doğrulamasına takılıyor
+    const loadData = async () => {
+        const { data, errors } = await Gavelon.validate();
+        if (errors.length) throw new Error(errors.join('; '));
+        return data;
+    };
+    require('./services/gavelon/game-server').attachGameServer(server, { path: wsPath, loadData });
     log.info('gavelon', `Oyun sunucusu hazır (WebSocket yolu ${wsPath})`);
 } catch (err) {
     log.error('gavelon', `Oyun sunucusu başlatılamadı: ${err.message}`);
