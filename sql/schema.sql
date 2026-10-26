@@ -262,3 +262,54 @@ CREATE TABLE IF NOT EXISTS app_logs (
   INDEX idx_created (createdAt),
   INDEX idx_level (level, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Gavelon içerik tabloları (admin paneli). Çalıştırmasan da API ilk kullanımda kendisi oluşturur ve seed verisini ekler.
+CREATE TABLE IF NOT EXISTS gavelon_universes (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  color CHAR(7) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gavelon_characters (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  universe VARCHAR(40) NOT NULL,
+  category VARCHAR(40) NOT NULL,
+  league VARCHAR(10) NOT NULL,
+  tags_json TEXT NOT NULL,
+  image VARCHAR(500) NULL,
+  hint VARCHAR(500) NOT NULL DEFAULT '',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  INDEX idx_universe (universe)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gavelon_bonds (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description VARCHAR(500) NOT NULL DEFAULT '',
+  condition_json TEXT NOT NULL,
+  bonus INT NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gavelon_tables (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  category VARCHAR(40) NOT NULL DEFAULT '',
+  description VARCHAR(500) NOT NULL DEFAULT '',
+  filter_json TEXT NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gavelon_scenarios (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description VARCHAR(500) NOT NULL DEFAULT '',
+  modifiers_json TEXT NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS gavelon_settings (
+  `key` VARCHAR(40) PRIMARY KEY,
+  value TEXT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
