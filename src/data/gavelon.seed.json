@@ -1,0 +1,813 @@
+{
+ "universes": [
+  {
+   "id": "league-of-legends",
+   "name": "League of Legends",
+   "color": "#0AA8A0"
+  },
+  {
+   "id": "dota-2",
+   "name": "Dota 2",
+   "color": "#C23C2A"
+  },
+  {
+   "id": "filmler",
+   "name": "Filmler",
+   "color": "#6D5BD0"
+  }
+ ],
+ "characters": [
+  {
+   "id": "lol-01",
+   "name": "Garen",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "zirhli"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Garen.png",
+   "hint": "Demacia'nın sarsılmaz zırhlı savaşçısı."
+  },
+  {
+   "id": "lol-02",
+   "name": "Lux",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "buyu",
+    "nisanci"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Lux.png",
+   "hint": "Işığı silaha çeviren Demacia büyücüsü."
+  },
+  {
+   "id": "lol-03",
+   "name": "Ahri",
+   "universe": "league-of-legends",
+   "category": "anti-kahraman",
+   "league": "sehir",
+   "tags": [
+    "buyu",
+    "hiz"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Ahri.png",
+   "hint": "Dokuz kuyruklu, büyüleyici tilki ruhu."
+  },
+  {
+   "id": "lol-04",
+   "name": "Jinx",
+   "universe": "league-of-legends",
+   "category": "kotu",
+   "league": "sehir",
+   "tags": [
+    "nisanci",
+    "teknoloji"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Jinx.png",
+   "hint": "Zaun'un başına buyruk silah delisi."
+  },
+  {
+   "id": "lol-05",
+   "name": "Yasuo",
+   "universe": "league-of-legends",
+   "category": "anti-kahraman",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "hiz"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Yasuo.png",
+   "hint": "Rüzgârı kılıcına katan sürgün kılıç ustası."
+  },
+  {
+   "id": "lol-06",
+   "name": "Zed",
+   "universe": "league-of-legends",
+   "category": "kotu",
+   "league": "gezegen",
+   "tags": [
+    "golge",
+    "yakin-dovus"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Zed.png",
+   "hint": "Gölge sanatının acımasız efendisi."
+  },
+  {
+   "id": "lol-07",
+   "name": "Thresh",
+   "universe": "league-of-legends",
+   "category": "kotu",
+   "league": "gezegen",
+   "tags": [
+    "golge",
+    "buyu"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Thresh.png",
+   "hint": "Ruhları fener ışığında toplayan gardiyan."
+  },
+  {
+   "id": "lol-08",
+   "name": "Teemo",
+   "universe": "league-of-legends",
+   "category": "kotu",
+   "league": "sokak",
+   "tags": [
+    "golge",
+    "nisanci"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Teemo.png",
+   "hint": "Küçük ama zehirli, mantarlarla dolu izci."
+  },
+  {
+   "id": "lol-09",
+   "name": "Malphite",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "dev",
+    "zirhli"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Malphite.png",
+   "hint": "Dağ gibi bir taş dev."
+  },
+  {
+   "id": "lol-10",
+   "name": "Ashe",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "nisanci",
+    "zeka"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Ashe.png",
+   "hint": "Freljord'un buz okçu kraliçesi."
+  },
+  {
+   "id": "lol-11",
+   "name": "Soraka",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "sokak",
+   "tags": [
+    "sifaci",
+    "buyu"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Soraka.png",
+   "hint": "Ölümlüleri iyileştirmek için yıldızlardan inen şifacı."
+  },
+  {
+   "id": "lol-12",
+   "name": "Blitzcrank",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "sokak",
+   "tags": [
+    "teknoloji",
+    "dev"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Blitzcrank.png",
+   "hint": "Zaun'un koca yürekli buhar golemi."
+  },
+  {
+   "id": "lol-13",
+   "name": "Darius",
+   "universe": "league-of-legends",
+   "category": "kotu",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "zirhli"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Darius.png",
+   "hint": "Noxus'un baltalı komutanı."
+  },
+  {
+   "id": "lol-14",
+   "name": "Ekko",
+   "universe": "league-of-legends",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "teknoloji",
+    "hiz"
+   ],
+   "image": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Ekko.png",
+   "hint": "Zamanı geri saran Zaun delikanlısı."
+  },
+  {
+   "id": "dota-01",
+   "name": "Anti-Mage",
+   "universe": "dota-2",
+   "category": "anti-kahraman",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "hiz"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/antimage.png",
+   "hint": "Büyüye karşı yemin etmiş keşiş."
+  },
+  {
+   "id": "dota-02",
+   "name": "Axe",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "yakin-dovus",
+    "zirhli"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/axe.png",
+   "hint": "Kızıl savaş efendisi, meydan okumaya bayılır."
+  },
+  {
+   "id": "dota-03",
+   "name": "Crystal Maiden",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "buyu",
+    "sifaci"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/crystal_maiden.png",
+   "hint": "Buz büyüsünün soğukkanlı destekçisi."
+  },
+  {
+   "id": "dota-04",
+   "name": "Drow Ranger",
+   "universe": "dota-2",
+   "category": "anti-kahraman",
+   "league": "sehir",
+   "tags": [
+    "nisanci",
+    "hiz"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/drow_ranger.png",
+   "hint": "Kuzeyin soğuk kanlı okçusu."
+  },
+  {
+   "id": "dota-05",
+   "name": "Invoker",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "gezegen",
+   "tags": [
+    "buyu",
+    "zeka"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/invoker.png",
+   "hint": "On kadim büyüyü harmanlayan bilge."
+  },
+  {
+   "id": "dota-06",
+   "name": "Juggernaut",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "hiz"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/juggernaut.png",
+   "hint": "Maskeli, durmak bilmeyen kılıç kasırgası."
+  },
+  {
+   "id": "dota-07",
+   "name": "Lina",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "buyu",
+    "nisanci"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/lina.png",
+   "hint": "Ateşi parmak uçlarında taşıyan büyücü."
+  },
+  {
+   "id": "dota-08",
+   "name": "Pudge",
+   "universe": "dota-2",
+   "category": "kotu",
+   "league": "sokak",
+   "tags": [
+    "dev",
+    "yakin-dovus"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/pudge.png",
+   "hint": "Kanca atıp kasap bıçağıyla karşılayan mezbaha ustası."
+  },
+  {
+   "id": "dota-09",
+   "name": "Phantom Assassin",
+   "universe": "dota-2",
+   "category": "kotu",
+   "league": "kita",
+   "tags": [
+    "golge",
+    "yakin-dovus"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/phantom_assassin.png",
+   "hint": "Gölgelerden çıkıp tek vuruşta bitiren suikastçı."
+  },
+  {
+   "id": "dota-10",
+   "name": "Sniper",
+   "universe": "dota-2",
+   "category": "anti-kahraman",
+   "league": "sokak",
+   "tags": [
+    "nisanci",
+    "teknoloji"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/sniper.png",
+   "hint": "Uzun menzilli tüfeğiyle kasabanın cüce nişancısı."
+  },
+  {
+   "id": "dota-11",
+   "name": "Shadow Fiend",
+   "universe": "dota-2",
+   "category": "kotu",
+   "league": "gezegen",
+   "tags": [
+    "golge",
+    "buyu"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/nevermore.png",
+   "hint": "Ruhları toplayıp güçlenen karanlık iblis."
+  },
+  {
+   "id": "dota-12",
+   "name": "Tinker",
+   "universe": "dota-2",
+   "category": "anti-kahraman",
+   "league": "sehir",
+   "tags": [
+    "teknoloji",
+    "zeka"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/tinker.png",
+   "hint": "Her derdin çaresi bir icat diyen mucit."
+  },
+  {
+   "id": "dota-13",
+   "name": "Zeus",
+   "universe": "dota-2",
+   "category": "anti-kahraman",
+   "league": "kozmik",
+   "tags": [
+    "buyu",
+    "zeka"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/zuus.png",
+   "hint": "Şimşekleri avucunda taşıyan Olimpos'un tanrısı."
+  },
+  {
+   "id": "dota-14",
+   "name": "Earthshaker",
+   "universe": "dota-2",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "dev",
+    "buyu"
+   ],
+   "image": "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/earthshaker.png",
+   "hint": "Totemiyle yeri sarsan dağ adamı."
+  },
+  {
+   "id": "film-01",
+   "name": "Iron Man",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "gezegen",
+   "tags": [
+    "teknoloji",
+    "zeka",
+    "zirhli"
+   ],
+   "image": null,
+   "hint": "Zırhını kendi yapan dahi milyarder (Marvel)."
+  },
+  {
+   "id": "film-02",
+   "name": "Thor",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "kozmik",
+   "tags": [
+    "buyu",
+    "dev"
+   ],
+   "image": null,
+   "hint": "Mjölnir'i taşıyan Asgard'ın gök gürültüsü tanrısı (Marvel)."
+  },
+  {
+   "id": "film-03",
+   "name": "Hulk",
+   "universe": "filmler",
+   "category": "anti-kahraman",
+   "league": "gezegen",
+   "tags": [
+    "dev",
+    "yakin-dovus"
+   ],
+   "image": null,
+   "hint": "Öfkelenince yeşile dönen bilim insanı (Marvel)."
+  },
+  {
+   "id": "film-04",
+   "name": "Black Widow",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "golge",
+    "yakin-dovus"
+   ],
+   "image": null,
+   "hint": "Eski casus, yakın dövüş ustası (Marvel)."
+  },
+  {
+   "id": "film-05",
+   "name": "Hawkeye",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "sokak",
+   "tags": [
+    "nisanci",
+    "zeka"
+   ],
+   "image": null,
+   "hint": "Hedefi hiç ıskalamayan okçu (Marvel)."
+  },
+  {
+   "id": "film-06",
+   "name": "Doctor Strange",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "gezegen",
+   "tags": [
+    "buyu",
+    "zeka"
+   ],
+   "image": null,
+   "hint": "Mistik sanatların Yüce Büyücüsü (Marvel)."
+  },
+  {
+   "id": "film-07",
+   "name": "Darth Vader",
+   "universe": "filmler",
+   "category": "kotu",
+   "league": "kozmik",
+   "tags": [
+    "zirhli",
+    "buyu",
+    "yakin-dovus"
+   ],
+   "image": null,
+   "hint": "İmparatorluğun karanlık lordu (Star Wars)."
+  },
+  {
+   "id": "film-08",
+   "name": "Luke Skywalker",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "pilot",
+    "yakin-dovus"
+   ],
+   "image": null,
+   "hint": "Çiftçi çocuğundan Jedi'a (Star Wars)."
+  },
+  {
+   "id": "film-09",
+   "name": "Yoda",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "kozmik",
+   "tags": [
+    "buyu",
+    "zeka"
+   ],
+   "image": null,
+   "hint": "Yüz yıllardır Jedi'ları eğiten bilge (Star Wars)."
+  },
+  {
+   "id": "film-10",
+   "name": "Han Solo",
+   "universe": "filmler",
+   "category": "anti-kahraman",
+   "league": "sehir",
+   "tags": [
+    "pilot",
+    "nisanci"
+   ],
+   "image": null,
+   "hint": "Millennium Falcon'ın külhanbeyi kaptanı (Star Wars)."
+  },
+  {
+   "id": "film-11",
+   "name": "Gandalf",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "gezegen",
+   "tags": [
+    "buyu",
+    "zeka"
+   ],
+   "image": null,
+   "hint": "Orta Dünya'nın gri büyücüsü (Yüzüklerin Efendisi)."
+  },
+  {
+   "id": "film-12",
+   "name": "Aragorn",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "kita",
+   "tags": [
+    "yakin-dovus",
+    "zirhli"
+   ],
+   "image": null,
+   "hint": "Gondor'un gerçek kralı, yüzüğün yoldaşı (Yüzüklerin Efendisi)."
+  },
+  {
+   "id": "film-13",
+   "name": "Legolas",
+   "universe": "filmler",
+   "category": "kahraman",
+   "league": "sehir",
+   "tags": [
+    "nisanci",
+    "hiz"
+   ],
+   "image": null,
+   "hint": "Elf okçu, yüzük yoldaşı (Yüzüklerin Efendisi)."
+  },
+  {
+   "id": "film-14",
+   "name": "Thanos",
+   "universe": "filmler",
+   "category": "kotu",
+   "league": "kozmik",
+   "tags": [
+    "dev",
+    "zirhli"
+   ],
+   "image": null,
+   "hint": "Evrenin yarısını silmek isteyen Titan (Marvel)."
+  }
+ ],
+ "bonds": [
+  {
+   "id": "demacia-kardesleri",
+   "name": "Demacia Kardeşleri",
+   "description": "Garen ve Lux yan yana, Demacia için.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "lol-01",
+     "lol-02"
+    ]
+   },
+   "bonus": 6
+  },
+  {
+   "id": "zaun-ruhu",
+   "name": "Zaun Ruhu",
+   "description": "Jinx, Ekko ve Blitzcrank: Zaun'un sokaklarından üç dost.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "lol-04",
+     "lol-14",
+     "lol-12"
+    ]
+   },
+   "bonus": 7
+  },
+  {
+   "id": "buz-ve-ates",
+   "name": "Buz ve Ateş",
+   "description": "Crystal Maiden ve Lina: iki zıt büyü bir arada.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "dota-03",
+     "dota-07"
+    ]
+   },
+   "bonus": 5
+  },
+  {
+   "id": "gokgurultusu",
+   "name": "Gök Gürültüsü",
+   "description": "Thor ve Zeus: iki şimşek tanrısı aynı safta.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "film-02",
+     "dota-13"
+    ]
+   },
+   "bonus": 6
+  },
+  {
+   "id": "guc-dengesi",
+   "name": "Güç Dengesi",
+   "description": "Vader, Luke ve Yoda: Güç'ün üç yüzü.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "film-07",
+     "film-08",
+     "film-09"
+    ]
+   },
+   "bonus": 7
+  },
+  {
+   "id": "yuzuk-yoldaslari",
+   "name": "Yüzük Yoldaşları",
+   "description": "Gandalf, Aragorn ve Legolas yeniden yolda.",
+   "condition": {
+    "type": "characters",
+    "ids": [
+     "film-11",
+     "film-12",
+     "film-13"
+    ]
+   },
+   "bonus": 7
+  },
+  {
+   "id": "golge-agi",
+   "name": "Gölge Ağı",
+   "description": "3 gölge karakter birbirinin izini örter.",
+   "condition": {
+    "type": "tag",
+    "tag": "golge",
+    "count": 3
+   },
+   "bonus": 5
+  },
+  {
+   "id": "buyu-cemberi",
+   "name": "Büyü Çemberi",
+   "description": "3 büyücü güçlerini birleştirir.",
+   "condition": {
+    "type": "tag",
+    "tag": "buyu",
+    "count": 3
+   },
+   "bonus": 6
+  },
+  {
+   "id": "keskin-niscilar",
+   "name": "Keskin Nişancılar",
+   "description": "2 nişancı çapraz ateş açar.",
+   "condition": {
+    "type": "tag",
+    "tag": "nisanci",
+    "count": 2
+   },
+   "bonus": 3
+  },
+  {
+   "id": "demir-duvar",
+   "name": "Demir Duvar",
+   "description": "2 zırhlı karakter omuz omuza.",
+   "condition": {
+    "type": "tag",
+    "tag": "zirhli",
+    "count": 2
+   },
+   "bonus": 3
+  }
+ ],
+ "tables": [
+  {
+   "id": "tum-evrenler",
+   "name": "Tüm Evrenler",
+   "category": "karisik",
+   "description": "42 karakterin hepsi havuzda.",
+   "filter": {}
+  },
+  {
+   "id": "lol-masa",
+   "name": "League of Legends Masası",
+   "category": "evren",
+   "description": "Sadece Runeterra şampiyonları.",
+   "filter": {
+    "universes": [
+     "league-of-legends"
+    ]
+   }
+  },
+  {
+   "id": "dota-masa",
+   "name": "Dota 2 Masası",
+   "category": "evren",
+   "description": "Sadece Dota 2 kahramanları.",
+   "filter": {
+    "universes": [
+     "dota-2"
+    ]
+   }
+  },
+  {
+   "id": "film-masa",
+   "name": "Filmler Masası",
+   "category": "evren",
+   "description": "Marvel, Star Wars ve Yüzüklerin Efendisi karakterleri.",
+   "filter": {
+    "universes": [
+     "filmler"
+    ]
+   }
+  },
+  {
+   "id": "kotuler-masasi",
+   "name": "Kötüler Masası",
+   "category": "tema",
+   "description": "Üç evrenin kötüleri karşı karşıya.",
+   "filter": {
+    "categories": [
+     "kotu"
+    ]
+   }
+  },
+  {
+   "id": "buyuculer-masasi",
+   "name": "Büyücüler Masası",
+   "category": "tema",
+   "description": "Büyü kullanan herkes havuzda.",
+   "filter": {
+    "tags": [
+     "buyu"
+    ]
+   }
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "karanlik-sokaklar",
+   "name": "Karanlık Sokaklar",
+   "description": "Dar ara sokaklarda gece kavgası. Gölgeler ve yakın dövüşçüler avantajlı, pilotlar dezavantajlı.",
+   "modifiers": {
+    "golge": 6,
+    "yakin-dovus": 4,
+    "pilot": -4
+   }
+  },
+  {
+   "id": "buyu-firtinasi",
+   "name": "Büyü Fırtınası",
+   "description": "Havada büyü dalgalanıyor. Büyücüler ve şifacılar güçlenir, teknoloji arızalanır.",
+   "modifiers": {
+    "buyu": 8,
+    "sifaci": 3,
+    "teknoloji": -5
+   }
+  },
+  {
+   "id": "sifir-yercekimi",
+   "name": "Sıfır Yerçekimi",
+   "description": "Uzay istasyonunda çatışma. Pilotlar ve teknoloji öne çıkar, iri cüsseliler zorlanır.",
+   "modifiers": {
+    "pilot": 6,
+    "teknoloji": 4,
+    "dev": -4,
+    "yakin-dovus": -3
+   }
+  }
+ ],
+ "config": {
+  "leagues": {
+   "sokak": 10,
+   "sehir": 20,
+   "kita": 30,
+   "gezegen": 40,
+   "kozmik": 50
+  },
+  "eloK": 10,
+  "classic": {
+   "budget": 20,
+   "teamSize": 5,
+   "minPrice": 1
+  },
+  "turnTimers": [
+   null,
+   15,
+   30
+  ]
+ }
+}

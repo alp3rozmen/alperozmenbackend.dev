@@ -38,9 +38,19 @@ for (const event of ['uncaughtException', 'unhandledRejection']) {
 }
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     log.info('sunucu', `Sunucu başladı (port ${PORT}, Node ${process.version}, pid ${process.pid})`);
 });
+
+// Gavelon oyun sunucusu (WebSocket): aynı HTTP sunucusuna bağlanır, yalnızca bu yoldaki yükseltmeleri alır.
+// Hata verirse backend'in geri kalanı etkilenmesin.
+try {
+    const wsPath = process.env.GAVELON_WS_PATH || '/gavelon-ws';
+    require('./services/gavelon/game-server').attachGameServer(server, { path: wsPath });
+    log.info('gavelon', `Oyun sunucusu hazır (WebSocket yolu ${wsPath})`);
+} catch (err) {
+    log.error('gavelon', `Oyun sunucusu başlatılamadı: ${err.message}`);
+}
 
 startDbConnection();
 // Servisler eksik sütunlar eklendikten sonra başlasın; yoksa eski tablodaki yeni sütunu sorgulayıp hata verirler
