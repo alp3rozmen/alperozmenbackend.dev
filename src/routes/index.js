@@ -18,6 +18,6 @@ router.use('/settings', require('./settings.routes'));
 router.use('/tiktok', require('./tiktok.routes'));
 router.use('/channels', require('./channel.routes'));
 router.use('/gavelon', require('./gavelon.routes'));
-// router.use('/mhrs-autorandevu', require('./mhrs.routes'));
+router.use('/mhrs-autorandevu', require('./mhrs.routes'));
 
 module.exports = router;
