@@ -1,0 +1,12 @@
+{
+  "name": "mhrs-token",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yerel yardımcı: bilgisayarında gerçek bir tarayıcı açar, sen e-Devlet ile (SMS dahil) giriş yaparsın, script oturum token'ını ağ isteklerinden yakalayıp ekrana yazar ve panoya kopyalar. Sunucuda çalışmaz, sadece kendi bilgisayarında kullanılır.",
+  "scripts": {
+    "start": "node get-token.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}
