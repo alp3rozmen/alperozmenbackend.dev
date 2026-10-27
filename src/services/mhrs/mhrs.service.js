@@ -1,6 +1,7 @@
 const moment = require("moment");
 moment.locale("tr");
 const functions = require("./mhrs.api");
+const telegram = require("../telegram");
 
 const LOG_LIMIT = 100;
 
@@ -14,15 +15,29 @@ function log(mesaj) {
 	if (job.loglar.length > LOG_LIMIT) job.loglar.shift();
 }
 
-function bitir(durum, mesaj) {
+// bildir: Telegram'a da haber verilsin mi (kullanıcı panelde olmayabilir)
+function bitir(durum, mesaj, bildir = false) {
 	clearTimeout(job.zamanlayici);
 	job.zamanlayici = null;
 	job.durum = durum;
 	job.bitisZamani = new Date().toISOString();
 	log(mesaj);
+	if (bildir) {
+		telegram.sendMessage(`🏥 <b>MHRS Oto Randevu</b>\n${telegram.escapeHtml(mesaj)}`).catch((e) =>
+			console.error("[mhrs] Telegram bildirimi gönderilemedi:", e.message),
+		);
+	}
 }
 
+// e-Devlet zorunluluğu sonrası şifreyle giriş genelde çalışmıyor; yalnızca eski
+// şifreli hesaplar için destekleniyor. Token modunda yenileme yapılamaz, hesap
+// sahibinin tarayıcıdan yeni bir token alıp tekrar başlatması gerekir.
 async function tokenYenile() {
+	if (job.mod !== "sifre") {
+		const err = new Error("Oturum süresi doldu, token modunda otomatik yenilenemez.");
+		err.yenilenemez = true;
+		throw err;
+	}
 	const loginresp = await functions.girisYap(job.kimlik.tckimlik, job.kimlik.sifre);
 	job.token = `Bearer ${loginresp.data.jwt}`;
 	log("Oturum yenilendi.");
@@ -59,7 +74,7 @@ async function kontrolEt() {
 	);
 
 	if (mevcutRandevu) {
-		bitir("tamamlandi", "Zaten bu klinikte bir randevunuz var, kontrol durduruldu.");
+		bitir("tamamlandi", "Zaten bu klinikte bir randevunuz var, kontrol durduruldu.", true);
 		return;
 	}
 
@@ -126,6 +141,7 @@ async function kontrolEt() {
 			bitir(
 				"tamamlandi",
 				`Randevu alındı! Hekim: ${job.sonuc.hekim} | Kurum: ${job.sonuc.kurum} | Tarih: ${job.sonuc.tarih}`,
+				true,
 			);
 			return;
 		}
@@ -150,7 +166,15 @@ async function tur() {
 		}
 	} catch (err) {
 		if (job !== calisan) return;
-		if (err.response?.data?.errors?.[0]?.kodu === "RND4010") {
+		if (err.yenilenemez) {
+			bitir(
+				"hata",
+				"Oturum süresi doldu. Tarayıcıdan tekrar e-Devlet ile giriş yapıp yeni token ile kontrolü yeniden başlatın.",
+				true,
+			);
+		} else if (yetkiHatasi(err)) {
+			bitir("hata", `Oturum yenilenemedi: ${err.message}. Kontrol durduruldu.`, true);
+		} else if (err.response?.data?.errors?.[0]?.kodu === "RND4010") {
 			job.denemeSayisi++;
 			log(`Randevu bulunamadı - ${job.denemeSayisi}. deneme`);
 		} else {
@@ -164,7 +188,9 @@ async function tur() {
 	}
 }
 
-function baslat(kimlik, token, parametreler) {
+// mod: 'sifre' (tckimlik+sifre ile, token süresi dolunca otomatik yenilenir) veya
+// 'token' (tarayıcıdan alınan hazır token, süresi dolunca elle yenilenmesi gerekir)
+function baslat(mod, kimlik, token, parametreler) {
 	if (job && job.durum === "calisiyor") {
 		const err = new Error("Zaten çalışan bir kontrol var, önce durdurun.");
 		err.status = 409;
@@ -173,6 +199,7 @@ function baslat(kimlik, token, parametreler) {
 
 	job = {
 		durum: "calisiyor",
+		mod,
 		kimlik,
 		token,
 		parametreler,
@@ -199,6 +226,7 @@ function durum() {
 	const { il, ilce, cinsiyet, klinik, onumuzdekiGun, kontrolSiklik } = job.parametreler;
 	return {
 		durum: job.durum,
+		mod: job.mod,
 		il: il.text,
 		ilce: ilce === "f" ? "Fark etmez" : ilce.text,
 		klinik: klinik.text,

@@ -6,6 +6,7 @@ exports.searchAndClaim = async (req, res) => {
     const {
       tckimlik,
       sifre,
+      token: hazirToken,
       il: ilPrompt,
       ilce: ilcePrompt,
       klinik: klinikPrompt,
@@ -14,8 +15,14 @@ exports.searchAndClaim = async (req, res) => {
       kontrolSiklik,
     } = req.body;
 
-    if (!tckimlik || !sifre || !ilPrompt || !klinikPrompt)
-      return res.status(400).json({ message: "T.C. kimlik, şifre, il ve klinik zorunlu" });
+    // MHRS artık çoğu hesapta e-Devlet/e-Nabız SSO zorunlu kıldığından T.C.+şifre
+    // yerine tarayıcıdan alınan hazır bir oturum token'ı da kabul edilir.
+    const girisModu = hazirToken ? "token" : "sifre";
+    if (girisModu === "sifre" && (!tckimlik || !sifre))
+      return res.status(400).json({ message: "T.C. kimlik + şifre ya da hazır token girmelisiniz" });
+
+    if (!ilPrompt || !klinikPrompt)
+      return res.status(400).json({ message: "İl ve klinik zorunlu" });
 
     if (mhrsService.durum().durum === "calisiyor")
       return res.status(409).json({ message: "Zaten çalışan bir kontrol var, önce durdurun." });
@@ -33,17 +40,38 @@ exports.searchAndClaim = async (req, res) => {
     if (!Number.isFinite(siklik) || siklik < 1 || siklik > 30)
       return res.status(400).json({ message: "Geçersiz kontrol sıklığı" });
 
-    // 2) Login
-    let loginresp;
-    try {
-      loginresp = await functions.girisYap(tckimlik, sifre);
-    } catch (err) {
-      return res.status(401).json({ message: "MHRS girişi başarısız, T.C. kimlik ve şifreyi kontrol edin" });
+    // 2) Oturum: ya hazır token kullanılır ya da (artık çoğunlukla çalışmayan) şifreli giriş denenir
+    let token;
+    if (girisModu === "token") {
+      token = `Bearer ${String(hazirToken).replace(/^Bearer\s+/i, "").trim()}`;
+    } else {
+      let loginresp;
+      try {
+        loginresp = await functions.girisYap(tckimlik, sifre);
+      } catch (err) {
+        return res.status(401).json({
+          message:
+            "MHRS girişi başarısız. T.C. kimlik/şifreyi kontrol edin; hesabınız e-Devlet'e taşındıysa tarayıcıdan alınan token ile deneyin.",
+        });
+      }
+      token = `Bearer ${loginresp.data.jwt}`;
     }
-    const token = `Bearer ${loginresp.data.jwt}`;
 
-    // 3) İller
-    const iller = await functions.illeriAl(token);
+    // 3) İller (bu istek token'ın geçerliliğini de doğrular)
+    let iller;
+    try {
+      iller = await functions.illeriAl(token);
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        return res.status(401).json({
+          message:
+            girisModu === "token"
+              ? "Token geçersiz veya süresi dolmuş. Tarayıcıdan MHRS'ye tekrar giriş yapıp yeni token alın."
+              : "MHRS oturumu doğrulanamadı.",
+        });
+      }
+      throw err;
+    }
     const ilSade = functions.yaziSadele(String(ilPrompt));
 
     const il = iller.find((a) =>
@@ -87,7 +115,8 @@ exports.searchAndClaim = async (req, res) => {
 
     // 6) Kontrol döngüsü başlat
     mhrsService.baslat(
-      { tckimlik, sifre },
+      girisModu,
+      girisModu === "sifre" ? { tckimlik, sifre } : null,
       token,
       { il, ilce, cinsiyet: c, klinik, onumuzdekiGun: gun, kontrolSiklik: siklik }
     );
