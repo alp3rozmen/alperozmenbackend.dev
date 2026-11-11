@@ -6,6 +6,7 @@ const { PRODUCT_MODELS, DEFAULT_PRODUCT_MODEL } = require('../services/tiktok/pr
 // `default`: ne DB'de ne .env'de değer yoksa kullanılır. `secret`: panelde tam değeri gösterilmez.
 // `encrypt`: DB'ye AES-256-GCM ile şifreli yazılır (borsa anahtarları; DB sızsa bile kullanılamasın).
 // `options`: panelde açılır liste; sadece bu değerler kaydedilebilir.
+// `internal`: panelde görünmez ve panelden yazılamaz; sunucunun kendi tuttuğu değerler (OAuth tokenları).
 const DEFINITIONS = {
   crypto_tg_bot_token: { env: ['CRYPTO_TG_BOT_TOKEN', 'BOT_TOKEN_CRYPTO'], secret: true },
   crypto_tg_chat_id: { env: ['CRYPTO_TG_CHAT_ID'], secret: false },
@@ -22,6 +23,11 @@ const DEFINITIONS = {
   // Gate.io API v4; sadece spot işlem izni, para çekme izni KAPALI olmalı
   gate_api_key: { env: [], secret: true, encrypt: true },
   gate_api_secret: { env: [], secret: true, encrypt: true },
+  // Shopier uygulaması (OAuth 2.0). Kişisel erişim tokenı (PAT) girilirse OAuth yerine o kullanılır.
+  shopier_client_id: { env: ['SHOPIER_CLIENT_ID'], secret: false },
+  shopier_client_secret: { env: ['SHOPIER_CLIENT_SECRET'], secret: true, encrypt: true },
+  shopier_pat: { env: ['SHOPIER_PAT'], secret: true, encrypt: true },
+  shopier_oauth: { env: [], secret: true, encrypt: true, internal: true },
 };
 
 // Şifreleme anahtarı DB'de değil sunucuda durur: SETTINGS_ENCRYPTION_KEY, yoksa JWT_SECRET'tan türetilir.
@@ -88,7 +94,7 @@ async function get(key) {
 // Panel için: gizli değerlerin sadece son 4 karakteri döner
 async function listForPanel() {
   const stored = await loadAll();
-  return Object.entries(DEFINITIONS).map(([key, def]) => {
+  return Object.entries(DEFINITIONS).filter(([, def]) => !def.internal).map(([key, def]) => {
     const value = decrypt(stored[key]) || null;
     return {
       key,
@@ -103,10 +109,12 @@ async function listForPanel() {
   });
 }
 
-// Tanımsız anahtarlar yok sayılır; boş string ayarı siler (.env'ye geri döner)
-async function setMany(values) {
+// Tanımsız anahtarlar yok sayılır; boş string ayarı siler (.env'ye geri döner).
+// `internal` anahtarlar sadece sunucu kodu `{ internal: true }` ile çağırınca yazılır.
+async function setMany(values, { internal = false } = {}) {
   for (const [key, raw] of Object.entries(values)) {
     if (!DEFINITIONS[key] || raw === undefined || raw === null) continue;
+    if (DEFINITIONS[key].internal && !internal) continue;
     const value = String(raw).trim();
     if (value && DEFINITIONS[key].options && !DEFINITIONS[key].options.some((o) => o.value === value)) {
       throw Object.assign(new Error(`${key} için geçersiz değer: ${value}`), { status: 400 });

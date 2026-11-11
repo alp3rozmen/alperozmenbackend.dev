@@ -313,3 +313,29 @@ CREATE TABLE IF NOT EXISTS gavelon_settings (
   `key` VARCHAR(40) PRIMARY KEY,
   value TEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Shopier toplu fiyat güncelleme kayıtları. Çalıştırmasan da API ilk kullanımda kendisi oluşturur.
+CREATE TABLE IF NOT EXISTS shopier_batches (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  label VARCHAR(200) NOT NULL,
+  revert_of INT UNSIGNED NULL,
+  status ENUM('running','done','aborted') NOT NULL DEFAULT 'running',
+  note VARCHAR(500) NULL,
+  created_at DATETIME NOT NULL,
+  finished_at DATETIME NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS shopier_batch_items (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  batch_id INT UNSIGNED NOT NULL,
+  product_id VARCHAR(40) NOT NULL,
+  title VARCHAR(300) NOT NULL DEFAULT '',
+  old_price DECIMAL(12,2) NULL,
+  new_price DECIMAL(12,2) NOT NULL,
+  old_discounted DECIMAL(12,2) NULL,
+  new_discounted DECIMAL(12,2) NULL,
+  variants_json TEXT NULL,
+  status ENUM('pending','ok','skipped','error') NOT NULL DEFAULT 'pending',
+  error VARCHAR(500) NULL,
+  INDEX idx_batch (batch_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
