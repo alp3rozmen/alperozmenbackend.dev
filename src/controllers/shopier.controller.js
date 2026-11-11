@@ -6,7 +6,9 @@ const ShopierBatch = require('../models/ShopierBatch');
 const fail = (res, err) => {
   if (!err.status) console.error('shopier:', err);
   // Shopier oturum hatası 401 olarak dönmez: panel 401'i kendi oturumunun düşmesi sayar
-  res.status(err.status === 401 ? 409 : err.status || 500).json({ message: err.status ? err.message : 'Sunucu hatası.' });
+  // Shopier kaynaklı hatalar (502) 400 olarak döner: hosting 5xx cevapların gövdesini kendi hata sayfasıyla değiştirip mesajı yutuyor
+  const code = err.status === 401 ? 409 : err.status >= 500 ? 400 : err.status;
+  res.status(code || 500).json({ message: err.status ? err.message : 'Sunucu hatası.' });
 };
 
 module.exports = {
